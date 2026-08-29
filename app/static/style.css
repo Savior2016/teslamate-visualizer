@@ -317,6 +317,252 @@ header h1:active { opacity: 0.55; }
 /* 移动端:按钮禁用双击缩放,保证点按即时响应 */
 button { touch-action: manipulation; }
 
+/* ===== 车辆总览:俯视图 + 能耗占比 + 四轮胎压 ===== */
+.carview {
+  display: flex;
+  gap: 20px;
+  align-items: stretch;
+}
+
+/* 左侧:俯视图舞台,四轮面板绝对定位在四角 */
+.car-stage {
+  position: relative;
+  flex: 0 0 400px;
+  min-height: 470px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.car-svg {
+  height: 430px;
+  width: auto;
+  display: block;
+}
+
+.car-body-base { fill: var(--tile-track); }
+
+.carfill-remaining { fill: var(--series-1); opacity: 0.92; }
+.carfill-drive { fill: var(--cat-drive); opacity: 0.92; }
+.carfill-sentry { fill: var(--cat-sentry); opacity: 0.92; }
+.carfill-climate { fill: var(--series-4); opacity: 0.92; }
+.carfill-idle { fill: var(--cat-idle); opacity: 0.92; }
+
+.carfill-remaining, .carfill-drive, .carfill-sentry, .carfill-climate, .carfill-idle, #carfill-uncharged {
+  transition: y 0.6s ease, height 0.6s ease;
+}
+
+/* 未充部分:斜纹(pattern 内元素用类以便随主题变色) */
+.hatch-bg { fill: var(--surface-1); }
+.hatch-line { stroke: var(--baseline); stroke-width: 1.6; opacity: 0.85; }
+
+/* 分段分隔线:用页面底色,视觉上把各段切开 */
+.carsep {
+  stroke: var(--surface-1);
+  stroke-width: 2;
+  transition: y1 0.6s ease, y2 0.6s ease;
+}
+
+/* 充电上限线(充入区与未充区的分界) */
+.carsep-limit {
+  stroke: var(--text-muted);
+  stroke-width: 1.4;
+  stroke-dasharray: 6 4;
+}
+
+/* HUD 角标 / 电量刻度 */
+.car-hud {
+  fill: none;
+  stroke: var(--baseline);
+  stroke-width: 1.5;
+  opacity: 0.75;
+}
+
+.car-gauge {
+  fill: none;
+  stroke: var(--text-muted);
+  stroke-width: 1.2;
+  opacity: 0.6;
+}
+
+.car-gauge-label {
+  fill: var(--text-muted);
+  font-size: 9px;
+  opacity: 0.8;
+}
+
+.car-body-line {
+  fill: none;
+  stroke: var(--baseline);
+  stroke-width: 2.5;
+  stroke-linejoin: miter;
+}
+
+.car-detail {
+  fill: none;
+  stroke: var(--text-muted);
+  stroke-width: 1.6;
+  opacity: 0.65;
+}
+
+.car-spine {
+  stroke-dasharray: 3 7;
+  stroke-width: 1.4;
+  opacity: 0.45;
+}
+
+/* 充电周期切换 ‹ 标签 › */
+.cycle-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 2px;
+}
+
+.cycle-nav button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 14px;
+  width: 26px;
+  height: 24px;
+  border-radius: 6px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+}
+
+.cycle-nav button:hover:not(:disabled) { background: var(--tile-track); color: var(--text-primary); }
+.cycle-nav button:disabled { opacity: 0.3; cursor: default; }
+
+.cycle-nav .cycle-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  padding: 0 6px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.car-center-value {
+  fill: var(--text-primary);
+  font-size: 30px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  paint-order: stroke;
+  stroke: var(--surface-1);
+  stroke-width: 5px;
+}
+
+.car-center-label {
+  fill: var(--text-secondary);
+  font-size: 12px;
+  paint-order: stroke;
+  stroke: var(--surface-1);
+  stroke-width: 4px;
+}
+
+/* 四轮面板:标签 + 当前胎压 + 迷你平滑填充曲线 */
+.wheel {
+  position: absolute;
+  width: 118px;
+  background: var(--page);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px 8px 4px;
+}
+
+.wheel-fl { left: 0; top: 36px; }
+.wheel-fr { right: 0; top: 36px; }
+.wheel-rl { left: 0; bottom: 36px; }
+.wheel-rr { right: 0; bottom: 36px; }
+
+.wheel-head {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.wheel-head b {
+  margin-left: auto;
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.wheel-unit { font-size: 10px; }
+
+.wheel-chart { width: 100%; height: 44px; }
+
+/* 右侧:图例 + 满电容量趋势 */
+.car-side {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.car-legend { display: flex; flex-direction: column; }
+
+.car-legend-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 9px 2px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--gridline);
+}
+
+.car-legend-row .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex: none;
+  align-self: center;
+}
+
+/* 未充:斜纹色块(与车身斜纹区一致) */
+.car-legend-row .dot.dot-hatch {
+  background: repeating-linear-gradient(45deg,
+    var(--baseline) 0 1.5px, var(--surface-1) 1.5px 4.5px);
+  border: 1px solid var(--baseline);
+}
+
+.car-legend-row .lg-label { color: var(--text-secondary); }
+
+.car-legend-row .lg-val {
+  margin-left: auto;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.car-legend-row .lg-share {
+  color: var(--text-muted);
+  font-size: 12px;
+  min-width: 46px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.car-side-title {
+  font-size: 12px;
+  font-weight: 550;
+  color: var(--text-muted);
+  margin: 14px 0 2px;
+}
+
+.chart-health { height: 150px; }
+
 /* ===== 过滤器行 ===== */
 .filter-row {
   display: flex;
@@ -832,6 +1078,10 @@ footer a { color: var(--text-muted); }
   #map { height: 320px; }
   .chart-activity { height: 320px; }
   .sentry-split { grid-template-columns: 1fr; }
+  /* 车辆总览:窄屏改为纵向排布,舞台宽度放开居中 */
+  .carview { flex-direction: column; }
+  .car-stage { flex: none; min-height: 440px; }
+  .car-svg { height: 400px; }
   .ev-row {
     grid-template-columns: 108px 1fr 56px;
     grid-template-areas:
@@ -900,6 +1150,16 @@ footer a { color: var(--text-muted); }
   #map { height: 300px; }
   .chip-legend { gap: 10px; }
   .mini-stat { padding: 5px 10px; }
+
+  /* 车辆总览:轮子面板收窄,俯视图缩小 */
+  .car-stage { min-height: 400px; }
+  .car-svg { height: 350px; }
+  .wheel { width: 96px; padding: 5px 6px 3px; }
+  .wheel-chart { height: 36px; }
+  .wheel-fl, .wheel-fr { top: 26px; }
+  .wheel-rl, .wheel-rr { bottom: 26px; }
+  .car-center-value { font-size: 24px; }
+  .chart-health { height: 130px; }
 
   /* 事件列表:日期行允许换行,摘要芯片独占一行防溢出 */
   .day-head { flex-wrap: wrap; padding: 9px 10px; }

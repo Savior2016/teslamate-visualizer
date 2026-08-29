@@ -64,6 +64,100 @@
   </div>
 
   <div class="grid">
+    <div class="card col-12" id="car-card">
+      <div class="card-head">
+        <div>
+          <h2>车辆总览</h2>
+          <div class="card-sub">车身为一次充电周期的能量去向:充入部分按 行驶 / 哨兵 / 驻车空调 / 驻车耗电 / 剩余 划分,顶部斜纹为本次未充部分;‹ › 切换充电周期,四轮为胎压与近期变化曲线</div>
+        </div>
+        <div class="card-head-right">
+          <div class="cycle-nav" id="cycle-nav" hidden>
+            <button id="cycle-prev" type="button" title="上一次充电周期">‹</button>
+            <span class="cycle-label" id="cycle-label">—</span>
+            <button id="cycle-next" type="button" title="后一次充电周期">›</button>
+          </div>
+          <div class="seg mini" id="car-mode-seg" role="group" aria-label="电量/度数/里程切换">
+            <button data-mode="pct" class="on">电量 %</button>
+            <button data-mode="kwh">度数 kWh</button>
+            <button data-mode="km">里程 km</button>
+          </div>
+          <div class="mini-stats" id="car-health-stats"></div>
+        </div>
+      </div>
+      <div class="carview">
+        <div class="car-stage">
+          <svg class="car-svg" viewBox="0 0 220 440" role="img" aria-label="车辆俯视图能耗分布">
+            <defs>
+              <clipPath id="car-body-clip">
+                <path d="M110 8 L170 128 L186 170 L186 360 L176 432 L44 432 L34 360 L34 170 L50 128 Z"/>
+              </clipPath>
+              <pattern id="car-hatch" width="7" height="7" patternUnits="userSpaceOnUse"
+                       patternTransform="rotate(45)">
+                <rect class="hatch-bg" width="7" height="7"/>
+                <line class="hatch-line" x1="0" y1="0" x2="0" y2="7"/>
+              </pattern>
+            </defs>
+            <!-- HUD 角标 -->
+            <path class="car-hud" d="M6 26 L6 6 L26 6 M194 6 L214 6 L214 26
+                                     M214 414 L214 434 L194 434 M26 434 L6 434 L6 414"/>
+            <!-- 车身底色(空槽) -->
+            <path class="car-body-base" d="M110 8 L170 128 L186 170 L186 360 L176 432 L44 432 L34 360 L34 170 L50 128 Z"/>
+            <!-- 能量占比堆叠填充(自底向上:剩余 / 行驶 / 哨兵 / 驻车空调 / 驻车耗电 / 未充) -->
+            <g clip-path="url(#car-body-clip)">
+              <rect id="carfill-remaining" class="carfill-remaining" x="0" y="440" width="220" height="0"/>
+              <rect id="carfill-drive" class="carfill-drive" x="0" y="440" width="220" height="0"/>
+              <rect id="carfill-sentry" class="carfill-sentry" x="0" y="440" width="220" height="0"/>
+              <rect id="carfill-climate" class="carfill-climate" x="0" y="440" width="220" height="0"/>
+              <rect id="carfill-idle" class="carfill-idle" x="0" y="440" width="220" height="0"/>
+              <rect id="carfill-uncharged" x="0" y="440" width="220" height="0" fill="url(#car-hatch)"/>
+              <line id="carsep-1" class="carsep" x1="10" x2="210" y1="440" y2="440"/>
+              <line id="carsep-2" class="carsep" x1="10" x2="210" y1="440" y2="440"/>
+              <line id="carsep-3" class="carsep" x1="10" x2="210" y1="440" y2="440"/>
+              <line id="carsep-4" class="carsep" x1="10" x2="210" y1="440" y2="440"/>
+              <line id="carsep-5" class="carsep carsep-limit" x1="10" x2="210" y1="440" y2="440"/>
+            </g>
+            <!-- 电量刻度(25 / 50 / 75%) -->
+            <path class="car-gauge" d="M20 326 L31 326 M20 220 L31 220 M20 114 L31 114"/>
+            <text class="car-gauge-label" x="16" y="329" text-anchor="end">25</text>
+            <text class="car-gauge-label" x="16" y="223" text-anchor="end">50</text>
+            <text class="car-gauge-label" x="16" y="117" text-anchor="end">75</text>
+            <!-- 车身切面棱线:前备箱折面 / 挡风玻璃下沿 / 中脊 / 侧面折线 / 尾部横线 -->
+            <path class="car-detail" d="M110 10 L88 128 M110 10 L132 128"/>
+            <path class="car-detail" d="M40 176 L180 176"/>
+            <path class="car-detail car-spine" d="M110 24 L110 416"/>
+            <path class="car-detail" d="M62 150 L62 418 M158 150 L158 418"/>
+            <path class="car-detail" d="M46 396 L174 396"/>
+            <!-- 中央剩余电量读数 -->
+            <text id="car-center-value" class="car-center-value" x="110" y="226" text-anchor="middle">—</text>
+            <text id="car-center-label" class="car-center-label" x="110" y="248" text-anchor="middle">当前剩余</text>
+            <!-- 车身描边(顶层,硬朗斜切角) -->
+            <path class="car-body-line" d="M110 8 L170 128 L186 170 L186 360 L176 432 L44 432 L34 360 L34 170 L50 128 Z"/>
+          </svg>
+          <div class="wheel wheel-fl">
+            <div class="wheel-head"><span>左前</span><b id="tpms-val-fl">—</b><span class="wheel-unit">bar</span></div>
+            <div class="wheel-chart" id="chart-wfl"></div>
+          </div>
+          <div class="wheel wheel-fr">
+            <div class="wheel-head"><span>右前</span><b id="tpms-val-fr">—</b><span class="wheel-unit">bar</span></div>
+            <div class="wheel-chart" id="chart-wfr"></div>
+          </div>
+          <div class="wheel wheel-rl">
+            <div class="wheel-head"><span>左后</span><b id="tpms-val-rl">—</b><span class="wheel-unit">bar</span></div>
+            <div class="wheel-chart" id="chart-wrl"></div>
+          </div>
+          <div class="wheel wheel-rr">
+            <div class="wheel-head"><span>右后</span><b id="tpms-val-rr">—</b><span class="wheel-unit">bar</span></div>
+            <div class="wheel-chart" id="chart-wrr"></div>
+          </div>
+        </div>
+        <div class="car-side">
+          <div class="car-legend" id="car-legend"></div>
+          <h3 class="car-side-title">满电容量估算(按每次充电)</h3>
+          <div class="chart chart-health" id="chart-health"></div>
+        </div>
+      </div>
+    </div>
+
     <div class="card col-12">
       <div class="card-head">
         <div>

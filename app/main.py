@@ -729,6 +729,28 @@ def _utc_ms(dt: datetime) -> int:
     return int(dt.replace(tzinfo=timezone.utc).timestamp() * 1000)
 
 
+def _battery_samples(cid: int, since_naive: datetime) -> list[tuple[int, int, bool]]:
+    """电量采样:5 分钟一桶取首条(哨兵/驻车分段用),驻车时约 30 分钟一条自然保留。"""
+    rows = q(
+        """
+        SELECT DISTINCT ON (b) date, battery_level, is_climate_on
+        FROM (
+            SELECT date, battery_level, is_climate_on,
+                   floor(extract(epoch FROM date) / 300)::bigint AS b
+            FROM positions
+            WHERE car_id = %s AND date >= %s AND battery_level IS NOT NULL
+        ) t
+        ORDER BY b, date
+        """,
+        (cid, since_naive),
+    )
+    return [
+        (_utc_ms(r["date"]), int(r["battery_level"]),
+         bool(r["is_climate_on"]) if r["is_climate_on"] is not None else False)
+        for r in rows
+    ]
+
+
 def _cut_interval(seg: tuple[int, int], intervals: list[tuple[int, int]]) -> list[tuple[int, int]]:
     """从区间 seg 中挖去 intervals 覆盖的部分,返回剩余片段。"""
     out, cur = [], seg[0]
@@ -841,25 +863,7 @@ def activity(car_id: int | None = Query(default=None),
     since_naive = since.replace(tzinfo=None)
 
     # 电量采样:5 分钟一桶取首条,驻车时约 30 分钟一条自然保留
-    sample_rows = q(
-        """
-        SELECT DISTINCT ON (b) date, battery_level, is_climate_on
-        FROM (
-            SELECT date, battery_level, is_climate_on,
-                   floor(extract(epoch FROM date) / 300)::bigint AS b
-            FROM positions
-            WHERE car_id = %s AND date >= %s AND battery_level IS NOT NULL
-        ) t
-        ORDER BY b, date
-        """,
-        (cid, since_naive),
-    )
-    samples: list[tuple[int, int, bool]] = []
-    for r in sample_rows:
-        samples.append((
-            _utc_ms(r["date"]), int(r["battery_level"]),
-            bool(r["is_climate_on"]) if r["is_climate_on"] is not None else False,
-        ))
+    samples = _battery_samples(cid, since_naive)
 
     # 行驶/充电多取 2 小时:窗口边缘的行程需参与分段挖除,展示时再按窗口过滤
     buffered = since_naive - timedelta(hours=2)
@@ -998,6 +1002,162 @@ def efficiency_trend(car_id: int | None = Query(default=None),
             "start_name": r["start_name"], "end_name": r["end_name"],
         })
     return {"kwh_per_ideal_km": ratio, "points": points}
+
+
+@app.get("/api/battery/health")
+def battery_health(car_id: int | None = Query(default=None)):
+    """满电容量估算与电池健康度。
+
+    每次充电:满电容量 ≈ 充电量 ÷ 表显电量增幅 × 100(口径含充电损耗,
+    只用于相对比较)。基准容量取全部估算的 90 分位(抗离群),当前容量取
+    最近 3 次的中位数,健康度 = 当前 ÷ 基准。
+    """
+    cid = get_car_id(car_id)
+    rows = q(
+        f"""
+        SELECT {local_ts('cp.start_date', 'start_date')},
+               cp.charge_energy_added, cp.start_battery_level, cp.end_battery_level
+        FROM charging_processes cp
+        WHERE cp.car_id = %s AND cp.charge_energy_added IS NOT NULL
+          AND cp.end_battery_level > cp.start_battery_level
+        ORDER BY cp.start_date
+        """,
+        (cid,),
+    )
+    points = []
+    for r in rows:
+        delta = int(r["end_battery_level"]) - int(r["start_battery_level"])
+        if delta < 10:  # 增幅太小,估算误差大
+            continue
+        cap = float(r["charge_energy_added"]) / delta * 100
+        if 30 <= cap <= 150:  # 合理区间过滤离群值
+            points.append({"ts": int(r["start_date_ts"]), "kwh": round(cap, 1)})
+    if not points:
+        return {"points": [], "current_kwh": None, "nominal_kwh": None,
+                "health_pct": None}
+    caps = sorted(p["kwh"] for p in points)
+    nominal = caps[min(len(caps) - 1, int(len(caps) * 0.9))]
+    recent = sorted(p["kwh"] for p in points[-3:])
+    current = recent[len(recent) // 2]
+    return {
+        "points": points,
+        "current_kwh": round(current, 1),
+        "nominal_kwh": round(nominal, 1),
+        "health_pct": round(min(100.0, current / nominal * 100), 1),
+    }
+
+
+@app.get("/api/energy/cycles")
+def energy_cycles(car_id: int | None = Query(default=None),
+                  limit: int = Query(default=6, ge=1, le=20)):
+    """按充电周期划分能量去向:每次充电结束 → 下次充电开始(进行中的周期到现在)。
+
+    每段:充至电量 level_after;未充 = 100 - level_after;周期内行驶能耗按
+    理想续航差值 × 校准系数折算;哨兵/驻车空调/驻车(休眠)耗电由电量采样分段
+    (_split_segments),单位均为电池 %。周期末剩余 = 下次充电起始电量,
+    进行中的周期 = 当前可用电量。
+    """
+    cid = get_car_id(car_id)
+    ratio = kwh_per_ideal_km(cid)
+    charges = q(
+        f"""
+        SELECT cp.id, cp.end_date AS end_date_utc,
+               {local_ts('cp.start_date', 'start_date')},
+               {local_ts('cp.end_date', 'end_date')},
+               cp.start_battery_level, cp.end_battery_level, cp.charge_energy_added
+        FROM charging_processes cp
+        WHERE cp.car_id = %s AND cp.end_date IS NOT NULL
+          AND cp.start_battery_level IS NOT NULL AND cp.end_battery_level IS NOT NULL
+        ORDER BY cp.start_date DESC
+        LIMIT %s
+        """,
+        (cid, limit + 1),  # 多取一次,用于界定最旧周期的期末剩余
+    )
+    if not charges:
+        return {"cycles": []}
+    charges.reverse()  # 升序
+
+    # 每次充电的满电容量估算(供 % → kWh 换算);全局最近几次中位数作回退
+    def cap_of(c):
+        delta = int(c["end_battery_level"]) - int(c["start_battery_level"])
+        if delta >= 10 and c["charge_energy_added"]:
+            cap = float(c["charge_energy_added"]) / delta * 100
+            if 30 <= cap <= 150:
+                return round(cap, 1)
+        return None
+
+    valid_caps = [cap for cap in (cap_of(c) for c in charges) if cap is not None]
+    recent = valid_caps[-3:]
+    current_cap = sorted(recent)[len(recent) // 2] if recent \
+        else round(kwh_per_pct(cid) * 100, 1)
+
+    lat = q(
+        "SELECT usable_battery_level FROM positions "
+        "WHERE car_id = %s AND usable_battery_level IS NOT NULL "
+        "ORDER BY date DESC LIMIT 1",
+        (cid,),
+    )
+    usable_now = int(lat[0]["usable_battery_level"]) if lat else None
+
+    oldest_naive = charges[0]["end_date_utc"]
+    samples = _battery_samples(cid, oldest_naive)
+    drive_rows = q(
+        f"""
+        SELECT {local_ts('d.start_date', 'start_date')},
+               {local_ts('d.end_date', 'end_date')},
+               d.start_ideal_range_km, d.end_ideal_range_km
+        FROM drives d
+        WHERE d.car_id = %s AND d.start_date >= %s
+        ORDER BY d.start_date
+        """,
+        (cid, oldest_naive),
+    )
+    drives = []
+    for d in drive_rows:
+        kwh = 0.0
+        if (d["start_ideal_range_km"] is not None
+                and d["end_ideal_range_km"] is not None):
+            delta = float(d["start_ideal_range_km"] - d["end_ideal_range_km"])
+            if delta > 0:
+                kwh = delta * ratio
+        drives.append((int(d["start_date_ts"]), int(d["end_date_ts"]), kwh))
+
+    now_ms = int(time.time() * 1000)
+    cycles_all = []
+    for i, c in enumerate(charges):
+        s = int(c["end_date_ts"])
+        nxt = charges[i + 1] if i + 1 < len(charges) else None
+        e = int(nxt["start_date_ts"]) if nxt else now_ms
+        cyc_samples = [smp for smp in samples if s <= smp[0] <= e]
+        cyc_iv = [(a, b) for a, b, _ in drives if a < e and b > s]
+        seg = _split_segments(cyc_samples, cyc_iv)
+        sentry_pct = max(0.0, -sum(p["delta"] for p in seg["sentry"]))
+        climate_pct = max(0.0, -sum(p["delta"] for p in seg["idle"]
+                                    if p["kind"] == "climate"))
+        idle_pct = max(0.0, -sum(p["delta"] for p in seg["idle"]
+                                 if p["kind"] != "climate"))
+        drive_kwh = sum(k for a, _, k in drives if s <= a < e)
+        cap = cap_of(c) or current_cap
+        level_after = int(c["end_battery_level"])
+        remaining = int(nxt["start_battery_level"]) if nxt else usable_now
+        if remaining is None:  # 无最新电量:用残差兜底
+            remaining = max(0.0, level_after - drive_kwh / cap * 100
+                            - sentry_pct - climate_pct - idle_pct)
+        cycles_all.append({
+            "charge_id": c["id"],
+            "charge_end_ts": s,
+            "charge_end_local": c["end_date_local"],
+            "level_after": level_after,
+            "uncharged_pct": max(0, 100 - level_after),
+            "cap_kwh": cap,
+            "drive_pct": round(drive_kwh / cap * 100, 1),
+            "sentry_pct": round(sentry_pct, 1),
+            "climate_pct": round(climate_pct, 1),
+            "idle_pct": round(idle_pct, 1),
+            "remaining_pct": round(float(remaining), 1),
+            "active": nxt is None,
+        })
+    return {"cycles": cycles_all[-limit:][::-1]}  # 新的在前
 
 
 @app.get("/api/tpms/trend")

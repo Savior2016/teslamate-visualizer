@@ -7,7 +7,11 @@
     days: 7,
     theme: localStorage.getItem('ttv-theme') || 'dark',
     battMode: localStorage.getItem('ttv-batt-mode') || 'pct',
+    carMode: localStorage.getItem('ttv-car-mode') || 'pct',
     overview: null,
+    health: null,
+    cycles: null,
+    cycleIdx: 0,
     timer: null,
   };
 
@@ -1040,6 +1044,219 @@
     }), { notMerge: true });
   }
 
+  /* ---------- 渲染:车辆总览(俯视图 + 能耗占比 + 四轮胎压 + 电池健康) ---------- */
+
+  // 本卡片独立的三态切换:电量 % / 度数 kWh / 里程 km
+  function carModeEffective() {
+    if (S.carMode === 'km' && kmFull() === null) return 'pct';
+    return S.carMode;
+  }
+
+  // 电池 % → 当前展示单位(cap 为该充电周期估算的满电容量)
+  function carConvPct(pct, cap) {
+    const mode = carModeEffective();
+    if (mode === 'kwh') return { v: pct / 100 * cap, unit: 'kWh', dec: 1 };
+    if (mode === 'km') {
+      const f = kmFull();
+      return { v: f ? pct / 100 * f : null, unit: 'km', dec: 0 };
+    }
+    return { v: pct, unit: '%', dec: 0 };
+  }
+
+  function renderCar() {
+    const o = S.overview;
+    if (!o) return;
+
+    /* --- 能量占比:车身堆叠填充(按充电周期:充电结束 → 下次充电开始/现在) --- */
+    const cycles = (S.cycles && S.cycles.cycles) || [];
+    S.cycleIdx = Math.min(S.cycleIdx, Math.max(0, cycles.length - 1));
+    const cyc = cycles.length ? cycles[S.cycleIdx] : null;
+
+    // 周期切换导航(‹ 上一次 / 后一次 ›)
+    const nav = $('#cycle-nav');
+    nav.hidden = !cycles.length;
+    if (cyc) {
+      $('#cycle-label').textContent =
+        `${fmtTime(Number(cyc.charge_end_ts))} 充至 ${fmtNum(cyc.level_after, 0)}%` +
+        (cyc.active ? ' · 进行中' : '');
+      $('#cycle-prev').disabled = S.cycleIdx >= cycles.length - 1;
+      $('#cycle-next').disabled = S.cycleIdx <= 0;
+    }
+
+    const TOP = 8, BOT = 432, H = BOT - TOP;
+    const SEG_IDS = ['#carfill-remaining', '#carfill-drive', '#carfill-sentry',
+      '#carfill-climate', '#carfill-idle', '#carfill-uncharged'];
+    const SEP_IDS = ['#carsep-1', '#carsep-2', '#carsep-3', '#carsep-4', '#carsep-5'];
+    const legend = $('#car-legend');
+    if (!cyc) {
+      SEG_IDS.forEach((id) => {
+        const r = $(id);
+        if (r) { r.setAttribute('y', BOT); r.setAttribute('height', 0); }
+      });
+      SEP_IDS.forEach((id) => {
+        const l = $(id);
+        if (l) { l.setAttribute('y1', BOT); l.setAttribute('y2', BOT); }
+      });
+      $('#car-center-value').textContent = '—';
+      legend.textContent = '';
+      legend.appendChild(el('div', 'events-empty', '暂无充电记录'));
+    } else {
+      const cap = cyc.cap_kwh || 84;
+      // 充入区高度固定 = level_after;内部各段按估算值归一化填满充入区,
+      // 顶部斜纹 = 本次未充部分(100% - 充至电量)
+      const inner = [
+        ['remaining', Number(cyc.remaining_pct)], ['drive', Number(cyc.drive_pct)],
+        ['sentry', Number(cyc.sentry_pct)], ['climate', Number(cyc.climate_pct)],
+        ['idle', Number(cyc.idle_pct)],
+      ];
+      const innerSum = inner.reduce((s, [, v]) => s + v, 0);
+      const scale = innerSum > 0 ? cyc.level_after / innerSum : 0;
+      let cum = 0;
+      const sepY = [];
+      inner.forEach(([k, v]) => {
+        const frac = v * scale;
+        cum += frac;
+        const r = $(`#carfill-${k}`);
+        r.setAttribute('y', (BOT - H * cum / 100).toFixed(1));
+        r.setAttribute('height', (H * frac / 100).toFixed(1));
+        sepY.push(BOT - H * cum / 100);
+      });
+      const un = Number(cyc.uncharged_pct);
+      cum += un;
+      const ru = $('#carfill-uncharged');
+      ru.setAttribute('y', (BOT - H * cum / 100).toFixed(1));
+      ru.setAttribute('height', (H * un / 100).toFixed(1));
+      sepY.push(BOT - H * cum / 100);
+      SEP_IDS.forEach((id, i) => {
+        const l = $(id);
+        if (!l) return;
+        l.setAttribute('y1', sepY[i].toFixed(1));
+        l.setAttribute('y2', sepY[i].toFixed(1));
+      });
+
+      // 中央读数 = 剩余(跟随切换单位)
+      const rc = carConvPct(Number(cyc.remaining_pct), cap);
+      $('#car-center-value').textContent =
+        rc.v === null ? '—' : `${fmtNum(rc.v, rc.dec)} ${rc.unit}`;
+      $('#car-center-label').textContent = cyc.active ? '当前剩余' : '周期末剩余';
+
+      /* --- 图例 --- */
+      legend.textContent = '';
+      const items = [
+        ['行驶', 'var(--cat-drive)', Number(cyc.drive_pct), false],
+        ['哨兵', 'var(--cat-sentry)', Number(cyc.sentry_pct), false],
+        ['驻车空调', 'var(--series-4)', Number(cyc.climate_pct), false],
+        ['驻车耗电', 'var(--cat-idle)', Number(cyc.idle_pct), false],
+        [cyc.active ? '当前剩余' : '周期末剩余', 'var(--series-1)', Number(cyc.remaining_pct), false],
+        ['本次未充', null, Number(cyc.uncharged_pct), true],
+      ];
+      items.forEach(([label, color, pct, hatch]) => {
+        const row = el('div', 'car-legend-row');
+        const dot = el('span', 'dot' + (hatch ? ' dot-hatch' : ''));
+        if (color) dot.style.background = color;
+        row.appendChild(dot);
+        row.appendChild(el('span', 'lg-label', label));
+        const c = carConvPct(pct, cap);
+        row.appendChild(el('span', 'lg-val',
+          c.v === null ? '—' : `${fmtNum(c.v, c.dec)} ${c.unit}`));
+        row.appendChild(el('span', 'lg-share', `${fmtNum(pct, 1)}%`));
+        legend.appendChild(row);
+      });
+    }
+
+    /* --- 电池健康 --- */
+    const stats = $('#car-health-stats');
+    stats.textContent = '';
+    const h = S.health;
+    if (h && h.health_pct !== null && h.health_pct !== undefined) {
+      const mk = (label, value, unit) => {
+        const t = el('span', 'mini-stat');
+        t.appendChild(el('span', '', label + ' '));
+        t.appendChild(el('b', '', String(value)));
+        if (unit) t.appendChild(el('span', '', ' ' + unit));
+        return t;
+      };
+      stats.appendChild(mk('电池健康度', fmtNum(h.health_pct, 1), '%'));
+      stats.appendChild(mk('满电估算', fmtNum(h.current_kwh, 1), 'kWh'));
+    }
+    if (charts.health) {
+      const pts = (h && h.points ? h.points : []).map((p) => [Number(p.ts), p.kwh]);
+      charts.health.setOption(Object.assign({}, chartTheme(), {
+        animation: false,
+        tooltip: tooltipAxis({ '满电容量估算': 'kWh' }, (v) => fmtTime(v)),
+        grid: { left: 8, right: 14, top: 14, bottom: 4, containLabel: true },
+        xAxis: Object.assign(timeAxis(30), { min: 'dataMin', max: 'dataMax' }),
+        yAxis: Object.assign(axisCommon(), {
+          type: 'value', scale: true,
+          axisLabel: { color: cssVar('--text-muted'), fontSize: 11, formatter: '{value}' },
+        }),
+        series: [{
+          name: '满电容量估算', type: 'line', data: pts,
+          smooth: 0.3, symbolSize: 6,
+          lineStyle: { width: 2, color: cssVar('--series-3') },
+          itemStyle: { color: cssVar('--series-3') },
+          areaStyle: { color: cssVar('--series-3') + '1f' },
+          markLine: h && h.nominal_kwh ? {
+            silent: true, symbol: 'none',
+            data: [{ yAxis: h.nominal_kwh }],
+            lineStyle: { color: cssVar('--text-muted'), type: 'dashed', width: 1 },
+            label: {
+              formatter: `基准 ${fmtNum(h.nominal_kwh, 1)} kWh`,
+              color: cssVar('--text-muted'), fontSize: 10, position: 'insideEndTop',
+            },
+          } : undefined,
+        }],
+        graphic: pts.length ? [] : [{
+          type: 'text', left: 'center', top: 'middle',
+          style: { text: '暂无充电数据,无法估算', fill: cssVar('--text-muted'), fontSize: 12 },
+        }],
+      }), { notMerge: true });
+    }
+
+    /* --- 四轮胎压:当前值 + 迷你平滑填充曲线 --- */
+    const w = (o.tpms && o.tpms.wheels) || {};
+    const wheels = [
+      ['fl', 'wfl', '--series-1'], ['fr', 'wfr', '--series-2'],
+      ['rl', 'wrl', '--series-3'], ['rr', 'wrr', '--series-4'],
+    ];
+    wheels.forEach(([key, cid, colorVar]) => {
+      const data = (w[key] || []).map((p) => [Number(p[0]), Number(p[1])]);
+      const valEl = $(`#tpms-val-${key}`);
+      if (valEl) valEl.textContent = data.length ? fmtNum(data[data.length - 1][1], 1) : '—';
+      const ch = charts[cid];
+      if (!ch) return;
+      const color = cssVar(colorVar);
+      ch.setOption(Object.assign({}, chartTheme(), {
+        animation: false,
+        tooltip: {
+          trigger: 'axis',
+          backgroundColor: cssVar('--surface-1'),
+          borderColor: cssVar('--border'), borderWidth: 1, padding: [5, 9],
+          textStyle: { color: cssVar('--text-primary'), fontSize: 11 },
+          extraCssText: 'box-shadow: 0 4px 16px rgba(0,0,0,.18);border-radius:8px;',
+          formatter(params) {
+            const p = params[0];
+            return `<div style="color:${cssVar('--text-muted')};font-size:10px">${fmtTime(p.value[0], true)}</div>` +
+                   `<b>${fmtNum(p.value[1], 1)} bar</b>`;
+          },
+        },
+        grid: { left: 2, right: 2, top: 3, bottom: 2 },
+        xAxis: { type: 'time', show: false },
+        yAxis: { type: 'value', show: false, scale: true },
+        series: [{
+          type: 'line', data, smooth: 0.55, showSymbol: false,
+          lineStyle: { width: 1.6, color },
+          areaStyle: {
+            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+              { offset: 0, color: color + '59' },
+              { offset: 1, color: color + '0a' },
+            ]),
+          },
+        }],
+      }), { notMerge: true });
+    });
+  }
+
   /* ---------- 渲染:行程表 ---------- */
 
   function renderTable() {
@@ -1395,7 +1612,7 @@
     try {
       const o = await api('overview');
       if (S.carId === null) S.carId = o.car_id;
-      const [trend, daily, recent, chg, routes, act, eff, tpms, costs, sys] = await Promise.all([
+      const [trend, daily, recent, chg, routes, act, eff, tpms, costs, sys, health, cyc] = await Promise.all([
         api(`trend?days=${S.days}`),
         api(`drives/daily?days=${S.days}`),
         api('drives/recent?limit=10'),
@@ -1406,6 +1623,8 @@
         api(`tpms/trend?days=${S.days}`),
         api('charging/costs?days=90'),
         api('system'),
+        api('battery/health'),
+        api('energy/cycles'),
       ]);
       S.overview = {
         ...o,
@@ -1421,9 +1640,12 @@
         tpms,
         costs,
       };
+      S.health = health;
+      S.cycles = cyc;
       $('#state-badge').dataset.state = 'unknown';
       renderSys(sys);
       renderHeader();
+      renderCar();
       renderKpis();
       renderTrends();
       renderDaily();
@@ -1450,7 +1672,7 @@
     renderDaily(); renderCharging(); renderTable();
     renderRoutes(); renderRoutesList(); renderCosts();
     renderActivity(); renderEvents(); renderSentry();
-    renderEfficiency(); renderTpms();
+    renderEfficiency(); renderTpms(); renderCar();
   }
 
   /* ---------- 初始化 ---------- */
@@ -1466,6 +1688,35 @@
     charts.sentryDrain = echarts.init($('#chart-sentry-drain'));
     charts.efficiency = echarts.init($('#chart-efficiency'));
     charts.tpms = echarts.init($('#chart-tpms'));
+    charts.health = echarts.init($('#chart-health'));
+    charts.wfl = echarts.init($('#chart-wfl'));
+    charts.wfr = echarts.init($('#chart-wfr'));
+    charts.wrl = echarts.init($('#chart-wrl'));
+    charts.wrr = echarts.init($('#chart-wrr'));
+
+    // 车辆总览:电量 % / 度数 kWh / 里程 km 三态切换(本卡片独立,持久化)
+    const carSeg = $('#car-mode-seg');
+    carSeg.querySelectorAll('button').forEach((b) =>
+      b.classList.toggle('on', b.dataset.mode === S.carMode));
+    carSeg.addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      S.carMode = b.dataset.mode;
+      localStorage.setItem('ttv-car-mode', S.carMode);
+      carSeg.querySelectorAll('button').forEach((x) =>
+        x.classList.toggle('on', x === b));
+      renderCar();
+    });
+
+    // 充电周期切换:‹ 上一次(更早)/ 后一次(更近)›
+    $('#cycle-prev').addEventListener('click', () => {
+      S.cycleIdx += 1;
+      renderCar();
+    });
+    $('#cycle-next').addEventListener('click', () => {
+      S.cycleIdx = Math.max(0, S.cycleIdx - 1);
+      renderCar();
+    });
 
     $('#range-seg').addEventListener('click', (e) => {
       const btn = e.target.closest('button');
