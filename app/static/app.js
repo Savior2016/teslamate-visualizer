@@ -1064,11 +1064,27 @@
     return { v: pct, unit: '%', dec: 0 };
   }
 
+  // 车身坐标系:viewBox 0 0 460 340,车头(左)=100% 满电端,车尾(右)=0%
+  const CARX = (p) => 436 - 4.12 * p;
+  // 车身上/下边缘折线(引线锚点用),按 x 线性插值
+  const POLY_TOP = [[24, 170], [40, 128], [74, 112], [108, 96], [170, 96], [178, 104],
+    [252, 110], [310, 96], [382, 98], [392, 104], [436, 108]];
+  const POLY_BOT = [[24, 170], [40, 212], [74, 228], [108, 244], [170, 244], [178, 236],
+    [252, 230], [310, 244], [382, 242], [392, 236], [436, 232]];
+  function edgeY(poly, x) {
+    for (let i = 0; i < poly.length - 1; i++) {
+      const [x1, y1] = poly[i];
+      const [x2, y2] = poly[i + 1];
+      if (x >= x1 && x <= x2) return y1 + (y2 - y1) * (x - x1) / (x2 - x1);
+    }
+    return poly[poly.length - 1][1];
+  }
+
   function renderCar() {
     const o = S.overview;
     if (!o) return;
 
-    /* --- 能量占比:车身堆叠填充(按充电周期:充电结束 → 下次充电开始/现在) --- */
+    /* --- 能量占比:车身横向分带(按充电周期:充电结束 → 下次充电开始/现在) --- */
     const cycles = (S.cycles && S.cycles.cycles) || [];
     S.cycleIdx = Math.min(S.cycleIdx, Math.max(0, cycles.length - 1));
     const cyc = cycles.length ? cycles[S.cycleIdx] : null;
@@ -1084,84 +1100,127 @@
       $('#cycle-next').disabled = S.cycleIdx <= 0;
     }
 
-    const TOP = 8, BOT = 432, H = BOT - TOP;
-    const SEG_IDS = ['#carfill-remaining', '#carfill-drive', '#carfill-sentry',
-      '#carfill-climate', '#carfill-idle', '#carfill-uncharged'];
+    const SEG_IDS = ['#carfill-uncharged', '#carfill-idle', '#carfill-climate',
+      '#carfill-sentry', '#carfill-drive', '#carfill-remaining'];
     const SEP_IDS = ['#carsep-1', '#carsep-2', '#carsep-3', '#carsep-4', '#carsep-5'];
-    const legend = $('#car-legend');
+    const calloutBox = $('.car-callouts');
+    const linksSvg = $('.car-links');
     if (!cyc) {
       SEG_IDS.forEach((id) => {
         const r = $(id);
-        if (r) { r.setAttribute('y', BOT); r.setAttribute('height', 0); }
+        if (r) { r.setAttribute('x', 24); r.setAttribute('width', 0); }
       });
       SEP_IDS.forEach((id) => {
         const l = $(id);
-        if (l) { l.setAttribute('y1', BOT); l.setAttribute('y2', BOT); }
+        if (l) { l.setAttribute('x1', 24); l.setAttribute('x2', 24); }
       });
       $('#car-center-value').textContent = '—';
-      legend.textContent = '';
-      legend.appendChild(el('div', 'events-empty', '暂无充电记录'));
+      calloutBox.textContent = '';
+      linksSvg.textContent = '';
     } else {
       const cap = cyc.cap_kwh || 84;
-      // 充入区高度固定 = level_after;内部各段按估算值归一化填满充入区,
-      // 顶部斜纹 = 本次未充部分(100% - 充至电量)
+      // 车头侧斜纹 = 本次未充(100% − 充至电量);充入区各段按估算值归一化填满
       const inner = [
-        ['remaining', Number(cyc.remaining_pct)], ['drive', Number(cyc.drive_pct)],
-        ['sentry', Number(cyc.sentry_pct)], ['climate', Number(cyc.climate_pct)],
-        ['idle', Number(cyc.idle_pct)],
+        ['uncharged', Number(cyc.uncharged_pct), true],
+        ['idle', Number(cyc.idle_pct), false],
+        ['climate', Number(cyc.climate_pct), false],
+        ['sentry', Number(cyc.sentry_pct), false],
+        ['drive', Number(cyc.drive_pct), false],
+        ['remaining', Number(cyc.remaining_pct), false],
       ];
-      const innerSum = inner.reduce((s, [, v]) => s + v, 0);
-      const scale = innerSum > 0 ? cyc.level_after / innerSum : 0;
-      let cum = 0;
-      const sepY = [];
-      inner.forEach(([k, v]) => {
-        const frac = v * scale;
-        cum += frac;
+      const normSum = inner.slice(1).reduce((s, x) => s + x[1], 0);
+      const scale = normSum > 0 ? cyc.level_after / normSum : 0;
+      let cum = 100;
+      const bands = {};
+      const boundsX = [];
+      inner.forEach(([k, v, raw], i) => {
+        const frac = raw ? v : v * scale;
+        const x1 = CARX(cum);
+        cum -= frac;
+        const x2 = CARX(cum);
         const r = $(`#carfill-${k}`);
-        r.setAttribute('y', (BOT - H * cum / 100).toFixed(1));
-        r.setAttribute('height', (H * frac / 100).toFixed(1));
-        sepY.push(BOT - H * cum / 100);
+        r.setAttribute('x', x1.toFixed(1));
+        r.setAttribute('width', Math.max(0, x2 - x1).toFixed(1));
+        bands[k] = { mid: (x1 + x2) / 2 };
+        if (i < inner.length - 1) boundsX.push(x2);
       });
-      const un = Number(cyc.uncharged_pct);
-      cum += un;
-      const ru = $('#carfill-uncharged');
-      ru.setAttribute('y', (BOT - H * cum / 100).toFixed(1));
-      ru.setAttribute('height', (H * un / 100).toFixed(1));
-      sepY.push(BOT - H * cum / 100);
       SEP_IDS.forEach((id, i) => {
         const l = $(id);
         if (!l) return;
-        l.setAttribute('y1', sepY[i].toFixed(1));
-        l.setAttribute('y2', sepY[i].toFixed(1));
+        l.setAttribute('x1', boundsX[i].toFixed(1));
+        l.setAttribute('x2', boundsX[i].toFixed(1));
       });
 
-      // 中央读数 = 剩余(跟随切换单位)
+      // 中央读数 = 剩余(置于剩余带中点,跟随切换单位)
       const rc = carConvPct(Number(cyc.remaining_pct), cap);
-      $('#car-center-value').textContent =
-        rc.v === null ? '—' : `${fmtNum(rc.v, rc.dec)} ${rc.unit}`;
-      $('#car-center-label').textContent = cyc.active ? '当前剩余' : '周期末剩余';
+      const cv = $('#car-center-value');
+      const cl = $('#car-center-label');
+      cv.textContent = rc.v === null ? '—' : `${fmtNum(rc.v, rc.dec)} ${rc.unit}`;
+      cl.textContent = cyc.active ? '当前剩余' : '周期末剩余';
+      cv.setAttribute('x', bands.remaining.mid.toFixed(1));
+      cl.setAttribute('x', bands.remaining.mid.toFixed(1));
 
-      /* --- 图例 --- */
-      legend.textContent = '';
-      const items = [
-        ['行驶', 'var(--cat-drive)', Number(cyc.drive_pct), false],
-        ['哨兵', 'var(--cat-sentry)', Number(cyc.sentry_pct), false],
-        ['驻车空调', 'var(--series-4)', Number(cyc.climate_pct), false],
-        ['驻车耗电', 'var(--cat-idle)', Number(cyc.idle_pct), false],
-        [cyc.active ? '当前剩余' : '周期末剩余', 'var(--series-1)', Number(cyc.remaining_pct), false],
-        ['本次未充', null, Number(cyc.uncharged_pct), true],
+      /* --- 引线标注:各段数值直接连到车身上(上侧 3 段 / 下侧 3 段) --- */
+      calloutBox.textContent = '';
+      linksSvg.textContent = '';
+      const stage = $('.car-stage');
+      const rSt = stage.getBoundingClientRect();
+      const rSvg = $('.car-svg').getBoundingClientRect();
+      const toX = (x) => (rSvg.left - rSt.left + x / 460 * rSvg.width) / rSt.width * 100;
+      const toY = (y) => (rSvg.top - rSt.top + y / 340 * rSvg.height) / rSt.height * 100;
+      const calls = [
+        { k: 'uncharged', name: '本次未充', pct: Number(cyc.uncharged_pct), side: 'top', hatch: true },
+        { k: 'climate', name: '驻车空调', pct: Number(cyc.climate_pct), side: 'top', color: 'var(--series-4)' },
+        { k: 'drive', name: '行驶', pct: Number(cyc.drive_pct), side: 'top', color: 'var(--cat-drive)' },
+        { k: 'idle', name: '驻车耗电', pct: Number(cyc.idle_pct), side: 'bot', color: 'var(--cat-idle)' },
+        { k: 'sentry', name: '哨兵', pct: Number(cyc.sentry_pct), side: 'bot', color: 'var(--cat-sentry)' },
+        { k: 'remaining', name: cyc.active ? '当前剩余' : '周期末剩余', pct: Number(cyc.remaining_pct), side: 'bot', color: 'var(--series-1)' },
       ];
-      items.forEach(([label, color, pct, hatch]) => {
-        const row = el('div', 'car-legend-row');
-        const dot = el('span', 'dot' + (hatch ? ' dot-hatch' : ''));
-        if (color) dot.style.background = color;
-        row.appendChild(dot);
-        row.appendChild(el('span', 'lg-label', label));
-        const c = carConvPct(pct, cap);
-        row.appendChild(el('span', 'lg-val',
-          c.v === null ? '—' : `${fmtNum(c.v, c.dec)} ${c.unit}`));
-        row.appendChild(el('span', 'lg-share', `${fmtNum(pct, 1)}%`));
-        legend.appendChild(row);
+      const gap = isNarrow() ? 24 : 14;  // 同侧标注最小间距(舞台宽 %)
+      const SVGNS = 'http://www.w3.org/2000/svg';
+      ['top', 'bot'].forEach((side) => {
+        const grp = calls.filter((c) => c.side === side).map((c) => Object.assign({}, c, {
+          ax: toX(bands[c.k].mid),
+          ay: toY(side === 'top' ? edgeY(POLY_TOP, bands[c.k].mid) : edgeY(POLY_BOT, bands[c.k].mid)),
+        })).sort((a, b) => a.ax - b.ax);
+        // 最小间距重分布:先正向排开,超出右界再整体回压(两侧避让轮子面板)
+        let x = 17;
+        grp.forEach((c) => { c.lx = Math.max(x, c.ax); x = c.lx + gap; });
+        if (x - gap > 79) {
+          x = 79;
+          for (let i = grp.length - 1; i >= 0; i--) {
+            grp[i].lx = Math.min(x, grp[i].lx);
+            x = grp[i].lx - gap;
+          }
+        }
+        const ty = side === 'top'
+          ? 46 / rSt.height * 100
+          : (rSt.height - 46) / rSt.height * 100;
+        grp.forEach((c) => {
+          const d = el('div', `car-callout cc-${side}`);
+          d.style.left = c.lx + '%';
+          const name = el('b');
+          const dot = el('span', 'cc-dot' + (c.hatch ? ' dot-hatch' : ''));
+          if (c.color) dot.style.background = c.color;
+          name.appendChild(dot);
+          name.appendChild(document.createTextNode(c.name));
+          d.appendChild(name);
+          const conv = carConvPct(c.pct, cap);
+          d.appendChild(el('span', 'cc-val', carModeEffective() === 'pct'
+            ? `${fmtNum(c.pct, 1)}%`
+            : `${conv.v === null ? '—' : `${fmtNum(conv.v, conv.dec)} ${conv.unit}`} · ${fmtNum(c.pct, 1)}%`));
+          calloutBox.appendChild(d);
+          const path = document.createElementNS(SVGNS, 'path');
+          path.setAttribute('class', 'leader');
+          path.setAttribute('d', side === 'top'
+            ? `M ${c.ax} ${c.ay} L ${c.ax} ${ty + 4} L ${c.lx} ${ty}`
+            : `M ${c.ax} ${c.ay} L ${c.ax} ${ty - 4} L ${c.lx} ${ty}`);
+          linksSvg.appendChild(path);
+          const dotP = document.createElementNS(SVGNS, 'path');
+          dotP.setAttribute('class', 'leader-dot');
+          dotP.setAttribute('d', `M ${c.ax} ${c.ay} l 0.01 0`);
+          linksSvg.appendChild(dotP);
+        });
       });
     }
 
@@ -2100,6 +2159,7 @@
     window.addEventListener('resize', () => {
       Object.values(charts).forEach((c) => c && c.resize());
       if (map) map.invalidateSize();
+      renderCar();  // 引线与标注按舞台实际尺寸定位,需随布局重算
     });
 
     refresh();

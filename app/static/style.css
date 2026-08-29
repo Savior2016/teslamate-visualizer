@@ -317,27 +317,104 @@ header h1:active { opacity: 0.55; }
 /* 移动端:按钮禁用双击缩放,保证点按即时响应 */
 button { touch-action: manipulation; }
 
-/* ===== 车辆总览:俯视图 + 能耗占比 + 四轮胎压 ===== */
+/* ===== 车辆总览:横向俯视图 + 引线标注 + 四轮胎压 ===== */
 .carview {
+  position: relative;
   display: flex;
   gap: 20px;
   align-items: stretch;
 }
 
-/* 左侧:俯视图舞台,四轮面板绝对定位在四角 */
+/* 左侧:俯视图舞台,标注芯片与引线浮于车上 */
 .car-stage {
   position: relative;
-  flex: 0 0 400px;
-  min-height: 470px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  flex: 0 0 720px;
+  height: 400px;
+}
+
+/* 四轮面板的定位框:桌面端绝对覆盖在舞台之上(不挡交互),窄屏落地为四列网格 */
+.wheel-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 720px;
+  height: 400px;
+  pointer-events: none;
+  z-index: 2;
 }
 
 .car-svg {
-  height: 430px;
-  width: auto;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* 引线层:非等比拉伸铺满舞台,线宽由 vector-effect 固定 */
+.car-links {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.leader {
+  fill: none;
+  stroke: var(--text-muted);
+  stroke-width: 1;
+  opacity: 0.75;
+  vector-effect: non-scaling-stroke;
+}
+
+.leader-dot {
+  fill: none;
+  stroke: var(--text-muted);
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+/* 引线末端的标注芯片 */
+.car-callout {
+  position: absolute;
+  z-index: 2;
+  transform: translateX(-50%);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 9px;
+  font-size: 12px;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.car-callout.cc-top { top: 6px; }
+.car-callout.cc-bot { bottom: 6px; }
+
+.car-callout b { font-weight: 600; color: var(--text-primary); }
+
+.car-callout .cc-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  margin-right: 5px;
+  vertical-align: baseline;
+}
+
+.cc-dot.dot-hatch {
+  background: repeating-linear-gradient(45deg,
+    var(--baseline) 0 1.5px, var(--surface-1) 1.5px 4.5px);
+  border: 1px solid var(--baseline);
+}
+
+.car-callout .cc-val {
   display: block;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  margin-top: 1px;
 }
 
 .car-body-base { fill: var(--tile-track); }
@@ -349,7 +426,7 @@ button { touch-action: manipulation; }
 .carfill-idle { fill: var(--cat-idle); opacity: 0.92; }
 
 .carfill-remaining, .carfill-drive, .carfill-sentry, .carfill-climate, .carfill-idle, #carfill-uncharged {
-  transition: y 0.6s ease, height 0.6s ease;
+  transition: x 0.6s ease, width 0.6s ease;
 }
 
 /* 未充部分:斜纹(pattern 内元素用类以便随主题变色) */
@@ -360,17 +437,17 @@ button { touch-action: manipulation; }
 .carsep {
   stroke: var(--surface-1);
   stroke-width: 2;
-  transition: y1 0.6s ease, y2 0.6s ease;
+  transition: x1 0.6s ease, x2 0.6s ease;
 }
 
-/* 充电上限线(充入区与未充区的分界) */
+/* 充电上限线(未充区与充入区的分界) */
 .carsep-limit {
   stroke: var(--text-muted);
   stroke-width: 1.4;
   stroke-dasharray: 6 4;
 }
 
-/* HUD 角标 / 电量刻度 */
+/* HUD 角标 / 电量刻度 / 轮胎 / 玻璃舱 */
 .car-hud {
   fill: none;
   stroke: var(--baseline);
@@ -390,6 +467,10 @@ button { touch-action: manipulation; }
   font-size: 9px;
   opacity: 0.8;
 }
+
+.car-tire { fill: var(--baseline); opacity: 0.85; }
+
+.car-glass { fill: var(--page); opacity: 0.35; }
 
 .car-body-line {
   fill: none;
@@ -469,17 +550,21 @@ button { touch-action: manipulation; }
 /* 四轮面板:标签 + 当前胎压 + 迷你平滑填充曲线 */
 .wheel {
   position: absolute;
+  z-index: 2;
   width: 118px;
+  pointer-events: auto;
   background: var(--page);
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 6px 8px 4px;
 }
 
-.wheel-fl { left: 0; top: 36px; }
-.wheel-fr { right: 0; top: 36px; }
-.wheel-rl { left: 0; bottom: 36px; }
-.wheel-rr { right: 0; bottom: 36px; }
+/* 车头朝左:左前/右前在舞台左侧上/下,左后/右后在右侧上/下;
+   垂直位置错开顶部/底部的引线标注区 */
+.wheel-fl { left: 0; top: 64px; }
+.wheel-fr { left: 0; bottom: 64px; }
+.wheel-rl { right: 0; top: 64px; }
+.wheel-rr { right: 0; bottom: 64px; }
 
 .wheel-head {
   display: flex;
@@ -502,63 +587,20 @@ button { touch-action: manipulation; }
 
 .wheel-chart { width: 100%; height: 44px; }
 
-/* 右侧:图例 + 满电容量趋势 */
+/* 右侧:满电容量趋势 */
 .car-side {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
-}
-
-.car-legend { display: flex; flex-direction: column; }
-
-.car-legend-row {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  padding: 9px 2px;
-  font-size: 13px;
-  border-bottom: 1px solid var(--gridline);
-}
-
-.car-legend-row .dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 3px;
-  flex: none;
-  align-self: center;
-}
-
-/* 未充:斜纹色块(与车身斜纹区一致) */
-.car-legend-row .dot.dot-hatch {
-  background: repeating-linear-gradient(45deg,
-    var(--baseline) 0 1.5px, var(--surface-1) 1.5px 4.5px);
-  border: 1px solid var(--baseline);
-}
-
-.car-legend-row .lg-label { color: var(--text-secondary); }
-
-.car-legend-row .lg-val {
-  margin-left: auto;
-  font-weight: 600;
-  color: var(--text-primary);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.car-legend-row .lg-share {
-  color: var(--text-muted);
-  font-size: 12px;
-  min-width: 46px;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
+  justify-content: center;
 }
 
 .car-side-title {
   font-size: 12px;
   font-weight: 550;
   color: var(--text-muted);
-  margin: 14px 0 2px;
+  margin: 0 0 2px;
 }
 
 .chart-health { height: 150px; }
@@ -1338,10 +1380,10 @@ footer a { color: var(--text-muted); }
   #map { height: 320px; }
   .chart-activity { height: 320px; }
   .sentry-split { grid-template-columns: 1fr; }
-  /* 车辆总览:窄屏改为纵向排布,舞台宽度放开居中 */
+  /* 车辆总览:窄屏改为纵向排布 */
   .carview { flex-direction: column; }
-  .car-stage { flex: none; min-height: 440px; }
-  .car-svg { height: 400px; }
+  .car-stage { flex: none; width: 100%; height: 360px; }
+  .wheel-row { width: auto; right: 0; height: 360px; }
   .ev-row {
     grid-template-columns: 108px 1fr 56px;
     grid-template-areas:
@@ -1411,13 +1453,22 @@ footer a { color: var(--text-muted); }
   .chip-legend { gap: 10px; }
   .mini-stat { padding: 5px 10px; }
 
-  /* 车辆总览:轮子面板收窄,俯视图缩小 */
-  .car-stage { min-height: 400px; }
-  .car-svg { height: 350px; }
-  .wheel { width: 96px; padding: 5px 6px 3px; }
+  /* 车辆总览:轮子面板从舞台四角落地为舞台下方四列,标注芯片收窄,舞台压低 */
+  .car-stage { height: 320px; }
+  .wheel-row {
+    position: static;
+    width: auto;
+    height: auto;
+    pointer-events: auto;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .wheel { position: static; width: auto; padding: 5px 6px 3px; }
   .wheel-chart { height: 36px; }
-  .wheel-fl, .wheel-fr { top: 26px; }
-  .wheel-rl, .wheel-rr { bottom: 26px; }
+  .car-callout { font-size: 11px; padding: 3px 7px; }
+  .car-callout .cc-val { font-size: 10px; }
   .car-center-value { font-size: 24px; }
   .chart-health { height: 130px; }
 
