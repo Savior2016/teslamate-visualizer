@@ -152,7 +152,7 @@
     document.querySelectorAll('.batt-toggle button').forEach((b) =>
       b.classList.toggle('on', b.dataset.mode === mode));
     // 仅重绘电量相关视图(避免地图 fitBounds 被重置)
-    renderKpis(); renderTrends(); renderActivity(); renderSentry();
+    renderHeader(); renderKpis(); renderTrends(); renderActivity(); renderSentry();
   }
 
   function chartTheme() {
@@ -277,17 +277,56 @@
 
   /* ---------- 渲染:顶栏状态 ---------- */
 
+  // 服务器硬盘 / 内存占用(顶栏第二行)
+  function renderSys(sys) {
+    if (!sys) return;
+    const parts = [];
+    if (sys.disk_pct !== null && sys.disk_pct !== undefined) {
+      parts.push(`硬盘 ${fmtNum(sys.disk_used_gb, 0)}/${fmtNum(sys.disk_total_gb, 0)} GB (${fmtNum(sys.disk_pct, 0)}%)`);
+    }
+    if (sys.mem_pct !== null && sys.mem_pct !== undefined) {
+      parts.push(`内存 ${fmtNum(sys.mem_used_mb / 1024, 1)}/${fmtNum(sys.mem_total_mb / 1024, 1)} GB (${fmtNum(sys.mem_pct, 0)}%)`);
+    }
+    $('#sys-stats').textContent = parts.join(' · ');
+  }
+
+  // 车型显示名:库中 model 为单字母;车主确认本车(Y / 74D 双电机)为 Model Y L
+  const MODEL_LABEL = { S: 'Model S', '3': 'Model 3', X: 'Model X', Y: 'Model Y' };
+  const TRIM_LABEL = { 'Y|74D': 'Model Y L' };
+
   function renderHeader() {
     const o = S.overview;
     if (!o) return;
     const car = o.cars.find((c) => c.id === S.carId) || o.cars[0];
     $('#car-name').textContent = car ? car.name : '—';
-    $('#car-model').textContent = car ? [car.model, car.trim_badging].filter(Boolean).join(' ') : '';
+    const trimKey = car ? `${car.model}|${car.trim_badging || ''}` : '';
+    const modelLabel = TRIM_LABEL[trimKey] ||
+      (car ? (MODEL_LABEL[car.model] || car.model || '') : '');
+    // Model Y L 展示官方字体生成的文字图标(SVG,随主题变色);其他车型回退为文字
+    const isYL = modelLabel === 'Model Y L';
+    $('#car-model-mark').hidden = !isYL;
+    const modelText = $('#car-model-text');
+    modelText.hidden = isYL;
+    if (!isYL) modelText.textContent = modelLabel;
     const badge = $('#state-badge');
     badge.dataset.state = o.state;
     $('#state-text').textContent = STATE_LABEL[o.state] || o.state;
     $('#sw-version').textContent = o.software_version ? `v${o.software_version}` : '';
     $('#updated-at').textContent = o.latest ? `数据更新 ${fmtTime(Number(o.latest.date_ts))}` : '暂无数据';
+
+    // 电量胶囊:跟随全局 电量%⇄里程km 模式;里程直接用最新额定续航
+    const lat = o.latest;
+    const usable = lat && lat.usable_battery_level != null ? Number(lat.usable_battery_level)
+      : (lat && lat.battery_level != null ? Number(lat.battery_level) : null);
+    const rated = lat && lat.rated_battery_range_km != null ? Number(lat.rated_battery_range_km) : null;
+    const kmMode = S.battMode === 'km' && kmFull() !== null;
+    $('#batt-text').textContent = kmMode && rated !== null
+      ? `${fmtNum(rated, 0)} km`
+      : (usable === null ? '—' : `${fmtNum(usable, 0)}%`);
+    const pct = usable === null ? 0 : Math.min(100, Math.max(0, usable));
+    $('#batt-fill').setAttribute('width', (19 * pct / 100).toFixed(1));
+    $('#batt-pill').dataset.level =
+      usable === null ? 'unknown' : pct < 10 ? 'critical' : pct < 20 ? 'low' : 'ok';
   }
 
   /* ---------- 渲染:趋势图 ---------- */
@@ -1153,12 +1192,11 @@
       dragging: !L.Browser.mobile,
       tap: true,
     });
-    mapTiles.dark = L.tileLayer(
-      'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-      { attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>', maxZoom: 19 });
-    mapTiles.light = L.tileLayer(
-      'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-      { attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>', maxZoom: 19 });
+    // 瓦片走本站 /api/tiles/ 代理(手机直连 CDN 在国内网络下不稳);
+    // 上游为 OSM 官方瓦片,深色主题用 CSS 滤镜反色(见 style.css .leaflet-tile-pane)
+    const tileAttr = { attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> 贡献者', maxZoom: 19 };
+    mapTiles.dark = L.tileLayer('/api/tiles/dark/{z}/{x}/{y}.png', tileAttr);
+    mapTiles.light = L.tileLayer('/api/tiles/light/{z}/{x}/{y}.png', tileAttr);
     switchMapTheme();
   }
 
@@ -1345,7 +1383,7 @@
     try {
       const o = await api('overview');
       if (S.carId === null) S.carId = o.car_id;
-      const [trend, daily, recent, chg, routes, act, eff, tpms, costs] = await Promise.all([
+      const [trend, daily, recent, chg, routes, act, eff, tpms, costs, sys] = await Promise.all([
         api(`trend?days=${S.days}`),
         api(`drives/daily?days=${S.days}`),
         api('drives/recent?limit=10'),
@@ -1355,6 +1393,7 @@
         api(`efficiency/trend?days=${S.days}`),
         api(`tpms/trend?days=${S.days}`),
         api('charging/costs?days=90'),
+        api('system'),
       ]);
       S.overview = {
         ...o,
@@ -1371,6 +1410,7 @@
         costs,
       };
       $('#state-badge').dataset.state = 'unknown';
+      renderSys(sys);
       renderHeader();
       renderKpis();
       renderTrends();
@@ -1424,7 +1464,14 @@
       refresh();
     });
 
-    $('#refresh-btn').addEventListener('click', refresh);
+    // 点击标题刷新;点击电量胶囊切换 电量 ⇄ 续航
+    $('#title-refresh').addEventListener('click', refresh);
+    const pill = $('#batt-pill');
+    const togglePill = () => setBattMode(S.battMode === 'km' ? 'pct' : 'km');
+    pill.addEventListener('click', togglePill);
+    pill.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePill(); }
+    });
     $('#theme-btn').addEventListener('click', () => {
       S.theme = S.theme === 'dark' ? 'light' : 'dark';
       applyTheme();

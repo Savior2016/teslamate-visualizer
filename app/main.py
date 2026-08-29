@@ -12,6 +12,7 @@ import re
 import secrets
 import threading
 import time
+import urllib.request
 from collections import defaultdict
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
@@ -19,7 +20,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
@@ -116,8 +117,9 @@ app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 @app.middleware("http")
 async def auth_and_headers(request: Request, call_next):
-    """HTTP Basic Auth + 基础安全响应头(健康检查除外)。"""
-    if AUTH_USERS and request.url.path != "/api/health":
+    """HTTP Basic Auth + 基础安全响应头(健康检查与地图瓦片代理除外)。"""
+    if AUTH_USERS and request.url.path != "/api/health" \
+            and not request.url.path.startswith("/api/tiles/"):
         ip = request.client.host if request.client else "?"
         now = time.time()
         fails = [t for t in _failures[ip] if now - t < FAIL_WINDOW]
@@ -249,6 +251,83 @@ def health():
         return {"status": "ok", "database": "connected", "tz": DISPLAY_TZ}
     except Exception as exc:  # noqa: BLE001
         return {"status": "error", "database": str(exc), "tz": DISPLAY_TZ}
+
+
+# 地图瓦片同源代理:手机端只需连通本站即可出图(直连 CDN 在国内移动网络下不稳,
+# 会一直「连接中」);由本站中转并做磁盘缓存。
+# 上游用 OSM 官方瓦片(CARTO 无 key 的 basemaps 已全面加水印「API KEY REQUIRED」),
+# 深色主题在前端用 CSS 滤镜反色实现。
+TILE_CACHE_DIR = os.environ.get("TILE_CACHE_DIR", "/data/tiles")
+TILE_UPSTREAM = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+TILE_HEADERS = {
+    "User-Agent": "TeslaMateVisualizer/1.0 (self-hosted personal dashboard, single user)",
+    "Accept": "image/png,image/*;q=0.8",
+}
+_tile_lock = threading.Lock()
+
+
+@app.get("/api/tiles/{style}/{z}/{x}/{y}")
+def map_tile(style: str, z: int, x: int, y: str):
+    m = re.fullmatch(r"(\d{1,7})(@2x)?\.png", y)
+    if m is None or style not in ("dark", "light") or not (0 <= z <= 19) or not (0 <= x < 2 ** 21):
+        raise HTTPException(status_code=404, detail="瓦片不存在")
+    yy = m.group(1)
+    if not (0 <= int(yy) < 2 ** 21):
+        raise HTTPException(status_code=404, detail="瓦片不存在")
+    cache_path = os.path.join(TILE_CACHE_DIR, str(z), str(x), f"{yy}.png")
+    if os.path.isfile(cache_path):
+        return FileResponse(cache_path, headers={"Cache-Control": "public, max-age=2592000"})
+    sub = "abc"[(x + int(yy)) % 3]
+    url = TILE_UPSTREAM.format(s=sub, z=z, x=x, y=yy)
+    try:
+        req = urllib.request.Request(url, headers=TILE_HEADERS)
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = resp.read()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"上游瓦片获取失败: {exc}") from exc
+    if not data.startswith(b"\x89PNG"):
+        raise HTTPException(status_code=502, detail="上游返回的不是 PNG")
+    with _tile_lock:
+        os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+        tmp = cache_path + ".tmp"
+        with open(tmp, "wb") as f:
+            f.write(data)
+        os.replace(tmp, cache_path)
+    return Response(
+        content=data,
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=2592000"},
+    )
+
+
+@app.get("/api/system")
+def system_stats():
+    """服务器资源:内存读 /proc/meminfo(容器内可见宿主机内存),
+    硬盘取根分区(overlay 即宿主机磁盘)。"""
+    mem: dict[str, int] = {}
+    try:
+        with open("/proc/meminfo", encoding="ascii") as f:
+            for line in f:
+                key, _, val = line.partition(":")
+                mem[key] = int(val.strip().split()[0])  # kB
+    except (OSError, ValueError, IndexError):
+        mem = {}
+    mem_total = mem.get("MemTotal")
+    mem_avail = mem.get("MemAvailable", mem.get("MemFree", 0))
+    mem_used = mem_total - mem_avail if mem_total else None
+
+    st = os.statvfs("/")
+    disk_total = st.f_blocks * st.f_frsize
+    disk_used = disk_total - st.f_bavail * st.f_frsize
+
+    return {
+        "mem_total_mb": round(mem_total / 1024) if mem_total else None,
+        "mem_used_mb": round(mem_used / 1024) if mem_used is not None else None,
+        "mem_pct": round(mem_used / mem_total * 100, 1) if mem_total else None,
+        "disk_total_gb": round(disk_total / 1e9, 1),
+        "disk_used_gb": round(disk_used / 1e9, 1),
+        "disk_pct": round(disk_used / disk_total * 100, 1) if disk_total else None,
+    }
 
 
 @app.get("/api/overview")
