@@ -1060,15 +1060,88 @@ button { touch-action: manipulation; }
 }
 
 .cg-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 10px;
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 9px 14px;
   background: var(--page);
 }
+
+.cg-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.cg-arrow {
+  flex: none;
+  font-size: 12px;
+  color: var(--text-muted);
+  transition: transform 0.15s ease;
+}
+
+.cg-item.open .cg-arrow { transform: rotate(90deg); }
+
+.cg-detail {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+}
+
+.cg-brand-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+
+.cg-brand-input {
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-primary);
+  background: var(--page);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 8px;
+  outline: none;
+  width: 180px;
+}
+
+.cg-brand-input:hover { border-color: var(--text-muted); }
+
+.cg-brand-input:focus { border-color: var(--series-1); }
+
+.cg-brand-input:disabled { opacity: 0.55; }
+
+.cg-name {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.cg-brand {
+  font-size: 10px;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 0 4px;
+  line-height: 1.5;
+}
+
+.cg-line {
+  display: flex;
+  flex-direction: column;
+  padding: 3px 0;
+  font-size: 12px;
+}
+
+.cg-line b { font-variant-numeric: tabular-nums; font-weight: 550; }
+
+.cg-line-sub { color: var(--text-muted); font-variant-numeric: tabular-nums; }
 
 .cg-head {
   display: flex;
@@ -1105,8 +1178,9 @@ button { touch-action: manipulation; }
 .cg-loss-high b { color: #fab219; }
 
 @media (max-width: 600px) {
-  .cg-item { flex-direction: column; align-items: flex-start; gap: 6px; }
+  .cg-row { flex-wrap: wrap; }
   .cg-stats { justify-content: flex-start; }
+  .cg-brand-input { width: 100%; flex: 1; }
 }
 
 /* ===== 地图轨迹列表 ===== */

@@ -1385,6 +1385,7 @@
       head.appendChild(timeBox);
 
       const chg = el('div', 'cs-charger');
+      if (c.charger_brand) chg.appendChild(el('span', 'cs-tag', c.charger_brand));
       const nameInp = el('input', 'cs-name-input');
       nameInp.type = 'text';
       nameInp.placeholder = '充电桩名称';
@@ -1495,7 +1496,9 @@
     });
   }
 
-  /* ---------- 渲染:充电桩统计(按桩聚合 sessions 数据) ---------- */
+  /* ---------- 渲染:充电桩统计(按桩聚合 sessions 数据,可展开详情) ---------- */
+
+  const cgOpen = new Set();  // 展开的充电桩(按地点键),跨刷新保持展开状态
 
   function renderChargers() {
     const box = $('#cg-list');
@@ -1512,12 +1515,13 @@
     charges.forEach((c) => {
       const key = c.loc_key || 'noloc';
       const g = agg.get(key) || {
-        name: '', location: '', count: 0,
-        energy: 0, dur: 0, cost: 0, hasCost: false,
+        key, name: '', location: '', brand: '', firstId: c.id, list: [],
+        count: 0, energy: 0, dur: 0, cost: 0, hasCost: false,
         ePaired: 0, uPaired: 0,  // 仅「充电量与总耗电都有值」的会话参与损耗计算
       };
       if (!g.name && c.charger_name) g.name = c.charger_name;
       if (!g.location && c.charger_location) g.location = c.charger_location;
+      if (!g.brand && c.charger_brand) g.brand = c.charger_brand;
       g.count += 1;
       if (c.energy_kwh !== null && c.energy_kwh !== undefined) g.energy += Number(c.energy_kwh);
       g.dur += Number(c.duration_min) || 0;
@@ -1526,16 +1530,26 @@
         g.ePaired += Number(c.energy_kwh);
         g.uPaired += Number(c.total_kwh);
       }
+      g.list.push(c);
       agg.set(key, g);
     });
     const rows = [...agg.values()].sort((a, b) => b.energy - a.energy);
 
     rows.forEach((g) => {
-      const item = el('div', 'cg-item');
+      const open = cgOpen.has(g.key);
+      const item = el('div', open ? 'cg-item open' : 'cg-item');
+
+      /* 汇总行(点击展开/收起) */
+      const row = el('div', 'cg-row');
+      row.setAttribute('role', 'button');
+      row.tabIndex = 0;
       const head = el('div', 'cg-head');
-      head.appendChild(el('b', '', g.name || g.location || '未命名充电桩'));
+      const nameLine = el('div', 'cg-name');
+      nameLine.appendChild(el('b', '', g.name || g.location || '未命名充电桩'));
+      if (g.brand) nameLine.appendChild(el('span', 'cg-brand', g.brand));
+      head.appendChild(nameLine);
       if (g.name && g.location) head.appendChild(el('span', 'cg-loc', g.location));
-      item.appendChild(head);
+      row.appendChild(head);
 
       const stats = el('div', 'cg-stats');
       const chip = (label, value, cls) => {
@@ -1556,7 +1570,65 @@
         chip('损耗', '—');
       }
       if (g.hasCost) chip('费用', `¥${fmtNum(g.cost, 2)}`);
-      item.appendChild(stats);
+      row.appendChild(stats);
+      row.appendChild(el('span', 'cg-arrow', '▸'));
+
+      /* 详情(默认折叠):品牌填写 + 每次充电明细 */
+      const detail = el('div', 'cg-detail');
+      detail.hidden = !open;
+      const toggle = () => {
+        if (cgOpen.has(g.key)) cgOpen.delete(g.key);
+        else cgOpen.add(g.key);
+        const nowOpen = item.classList.toggle('open');
+        detail.hidden = !nowOpen;
+      };
+      row.addEventListener('click', toggle);
+      row.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+      });
+      item.appendChild(row);
+
+      const brandRow = el('div', 'cg-brand-row');
+      brandRow.appendChild(el('span', 'cs-label', '品牌'));
+      const brandInp = el('input', 'cg-brand-input');
+      brandInp.type = 'text';
+      brandInp.maxLength = 40;
+      brandInp.placeholder = g.key === 'noloc'
+        ? '无地点信息,无法存档' : '如 特来电 / 星星充电 / 家充';
+      brandInp.value = g.brand;
+      brandInp.dataset.orig = g.brand;
+      if (g.key === 'noloc') brandInp.disabled = true;
+      brandInp.addEventListener('change', () => {
+        const v = brandInp.value.trim();
+        if (v === brandInp.dataset.orig) return;
+        brandInp.disabled = true;
+        // 借用该地点下任意一次充电的 id 定位地点键;名称/地点原样带上,服务端保留不覆盖
+        csSave('/api/charging/charger',
+          { charge_id: g.firstId, name: g.name, location: g.location, brand: v },
+          [brandInp], false);
+      });
+      brandRow.appendChild(brandInp);
+      detail.appendChild(brandRow);
+
+      g.list.forEach((c) => {  // sessions 本身新的在前
+        const line = el('div', 'cg-line');
+        line.appendChild(el('b', '', fmtTime(c.start_ts)));
+        const parts = [];
+        if (c.energy_kwh !== null && c.energy_kwh !== undefined) {
+          parts.push(`${fmtNum(c.energy_kwh, 1)} kWh`);
+        }
+        if (c.total_kwh !== null && c.total_kwh !== undefined) {
+          parts.push(`总耗电 ${fmtNum(c.total_kwh, 1)}`);
+        }
+        if (c.total_kwh != null && c.energy_kwh != null && Number(c.total_kwh) > 0) {
+          parts.push(`损耗 ${fmtNum((c.total_kwh - c.energy_kwh) / c.total_kwh * 100, 1)}%`);
+        }
+        parts.push(fmtDur(c.duration_min));
+        if (c.cost !== null && c.cost !== undefined) parts.push(`¥${fmtNum(c.cost, 2)}`);
+        line.appendChild(el('span', 'cg-line-sub', parts.join(' · ')));
+        detail.appendChild(line);
+      });
+      item.appendChild(detail);
       box.appendChild(item);
     });
   }

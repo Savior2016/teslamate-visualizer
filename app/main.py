@@ -723,6 +723,7 @@ class ChargerIn(BaseModel):
     charge_id: int
     name: str = ""
     location: str = ""
+    brand: str | None = None  # None = 不改动已存品牌;空串 = 清除
 
 
 @app.get("/api/charging/sessions")
@@ -808,6 +809,7 @@ def charging_sessions(car_id: int | None = Query(default=None),
             "charger_name": (saved_charger or {}).get("name", ""),
             "charger_location": (saved_charger or {}).get("location",
                                                           r["address_name"] or ""),
+            "charger_brand": (saved_charger or {}).get("brand", ""),
             "cost": round(cost, 2) if cost is not None else None,
             "rate_yuan_kwh": rate,
             "after_km": after_km,
@@ -838,7 +840,10 @@ def set_charging_extra(payload: ChargeExtraIn):
 
 @app.post("/api/charging/charger")
 def set_charger(payload: ChargerIn):
-    """录入充电桩名称与地点;按充电地点存档,同一地点的后续充电自动带出。"""
+    """录入充电桩名称/地点/品牌;按充电地点存档,同一地点的后续充电自动带出。
+
+    brand 为 None 时保留已存品牌(「充电详情」卡片只提交名称与地点)。
+    """
     row = q("SELECT address_id, geofence_id FROM charging_processes WHERE id = %s",
             (payload.charge_id,))
     if not row:
@@ -849,12 +854,18 @@ def set_charger(payload: ChargerIn):
     name = payload.name.strip()[:80]
     location = payload.location.strip()[:120]
     extras = _load_extras()
-    if name or location:
-        extras["chargers"][key] = {"name": name, "location": location}
+    entry = dict(extras["chargers"].get(key) or {})
+    entry["name"] = name
+    entry["location"] = location
+    if payload.brand is not None:
+        entry["brand"] = payload.brand.strip()[:40]
+    if entry.get("name") or entry.get("location") or entry.get("brand"):
+        extras["chargers"][key] = entry
     else:
         extras["chargers"].pop(key, None)
     _save_extras(extras)
-    return {"ok": True, "loc_key": key, "name": name, "location": location}
+    return {"ok": True, "loc_key": key, "name": name, "location": location,
+            "brand": entry.get("brand", "")}
 
 
 @app.get("/api/routes")
