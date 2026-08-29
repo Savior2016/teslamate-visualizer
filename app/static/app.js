@@ -1064,61 +1064,71 @@
     return { v: pct, unit: '%', dec: 0 };
   }
 
-  // 车身坐标系:viewBox 0 0 460 340,车头(左)=100% 满电端,车尾(右)=0%
-  const CARX = (p) => 436 - 4.12 * p;
-  // 车身上/下边缘折线(引线锚点用),按 x 线性插值
-  const POLY_TOP = [[24, 170], [40, 128], [74, 112], [108, 96], [170, 96], [178, 104],
-    [252, 110], [310, 96], [382, 98], [392, 104], [436, 108]];
-  const POLY_BOT = [[24, 170], [40, 212], [74, 228], [108, 244], [170, 244], [178, 236],
-    [252, 230], [310, 244], [382, 242], [392, 236], [436, 232]];
-  function edgeY(poly, x) {
-    for (let i = 0; i < poly.length - 1; i++) {
-      const [x1, y1] = poly[i];
-      const [x2, y2] = poly[i + 1];
-      if (x >= x1 && x <= x2) return y1 + (y2 - y1) * (x - x1) / (x2 - x1);
-    }
-    return poly[poly.length - 1][1];
+  // 车身坐标系:viewBox 0 0 340 460,车头(上)=100% 满电端,车尾(下)=0%
+  const CARY = (p) => 436 - 4.12 * p;
+
+  // 分段点选:车身分带 ⇄ 图例详情 联动高亮(再点一次或点空白处取消)
+  let carSel = null;
+  function setCarSel(k) {
+    carSel = k || null;
+    document.querySelectorAll('.car-svg rect[id^="carfill-"]').forEach((r) => {
+      r.classList.toggle('dim', !!carSel && r.id !== `carfill-${carSel}`);
+    });
+    document.querySelectorAll('.cl-item').forEach((d) =>
+      d.classList.toggle('on', !!carSel && d.dataset.k === carSel));
+    const cv = $('.carview');
+    if (cv) cv.classList.toggle('has-sel', !!carSel);
   }
 
   function renderCar() {
     const o = S.overview;
     if (!o) return;
 
-    /* --- 能量占比:车身横向分带(按充电周期:充电结束 → 下次充电开始/现在) --- */
+    /* --- 能量占比:车身纵向分带(按充电周期:充电结束 → 下次充电开始/现在) --- */
     const cycles = (S.cycles && S.cycles.cycles) || [];
     S.cycleIdx = Math.min(S.cycleIdx, Math.max(0, cycles.length - 1));
     const cyc = cycles.length ? cycles[S.cycleIdx] : null;
 
-    // 周期切换导航(‹ 上一次 / 后一次 ›)
-    const nav = $('#cycle-nav');
-    nav.hidden = !cycles.length;
-    if (cyc) {
-      $('#cycle-label').textContent =
-        `${fmtTime(Number(cyc.charge_end_ts))} 充至 ${fmtNum(cyc.level_after, 0)}%` +
-        (cyc.active ? ' · 进行中' : '');
-      $('#cycle-prev').disabled = S.cycleIdx >= cycles.length - 1;
-      $('#cycle-next').disabled = S.cycleIdx <= 0;
+    // 充电周期横条:每个周期一枚可点选芯片(横向滑动),条内小进度条为充至电量
+    const strip = $('#cycle-strip');
+    strip.hidden = !cycles.length;
+    const sig = cycles.map((c) => `${c.charge_id}:${c.level_after}:${c.charge_count}`).join(',');
+    if (strip.dataset.sig !== sig) {
+      strip.dataset.sig = sig;
+      strip.textContent = '';
+      cycles.forEach((c, i) => {
+        const b = el('button', 'cyc-chip');
+        b.type = 'button';
+        b.dataset.idx = i;
+        b.appendChild(el('b', '', `${fmtTime(Number(c.charge_end_ts))} 充至 ${fmtNum(c.level_after, 0)}%`));
+        const parts = [];
+        if (c.charge_count > 1) parts.push(`合并${c.charge_count}次`);
+        if (c.active) parts.push('进行中');
+        if (parts.length) b.appendChild(el('span', 'cyc-sub', parts.join(' · ')));
+        const bar = el('span', 'cyc-bar');
+        const fill = el('i');
+        fill.style.width = Math.max(0, Math.min(100, Number(c.level_after))) + '%';
+        bar.appendChild(fill);
+        b.appendChild(bar);
+        strip.appendChild(b);
+      });
     }
+    strip.querySelectorAll('.cyc-chip').forEach((b) =>
+      b.classList.toggle('on', Number(b.dataset.idx) === S.cycleIdx));
 
     const SEG_IDS = ['#carfill-uncharged', '#carfill-idle', '#carfill-climate',
       '#carfill-sentry', '#carfill-drive', '#carfill-remaining'];
     const SEP_IDS = ['#carsep-1', '#carsep-2', '#carsep-3', '#carsep-4', '#carsep-5'];
-    const calloutBox = $('.car-callouts');
-    const linksSvg = $('.car-links');
     if (!cyc) {
       SEG_IDS.forEach((id) => {
         const r = $(id);
-        if (r) { r.setAttribute('x', 24); r.setAttribute('width', 0); }
+        if (r) { r.setAttribute('y', 24); r.setAttribute('height', 0); }
       });
       SEP_IDS.forEach((id) => {
         const l = $(id);
-        if (l) { l.setAttribute('x1', 24); l.setAttribute('x2', 24); }
+        if (l) { l.setAttribute('y1', 24); l.setAttribute('y2', 24); }
       });
-      $('#car-center-value').textContent = '—';
-      calloutBox.textContent = '';
-      linksSvg.textContent = '';
     } else {
-      const cap = cyc.cap_kwh || 84;
       // 车头侧斜纹 = 本次未充(100% − 充至电量);充入区各段按估算值归一化填满
       const inner = [
         ['uncharged', Number(cyc.uncharged_pct), true],
@@ -1131,98 +1141,66 @@
       const normSum = inner.slice(1).reduce((s, x) => s + x[1], 0);
       const scale = normSum > 0 ? cyc.level_after / normSum : 0;
       let cum = 100;
-      const bands = {};
-      const boundsX = [];
+      const boundsY = [];
       inner.forEach(([k, v, raw], i) => {
         const frac = raw ? v : v * scale;
-        const x1 = CARX(cum);
+        const y1 = CARY(cum);
         cum -= frac;
-        const x2 = CARX(cum);
+        const y2 = CARY(cum);
         const r = $(`#carfill-${k}`);
-        r.setAttribute('x', x1.toFixed(1));
-        r.setAttribute('width', Math.max(0, x2 - x1).toFixed(1));
-        bands[k] = { mid: (x1 + x2) / 2 };
-        if (i < inner.length - 1) boundsX.push(x2);
+        r.setAttribute('y', y1.toFixed(1));
+        r.setAttribute('height', Math.max(0, y2 - y1).toFixed(1));
+        if (i < inner.length - 1) boundsY.push(y2);
       });
       SEP_IDS.forEach((id, i) => {
         const l = $(id);
         if (!l) return;
-        l.setAttribute('x1', boundsX[i].toFixed(1));
-        l.setAttribute('x2', boundsX[i].toFixed(1));
-      });
-
-      // 中央读数 = 剩余(置于剩余带中点,跟随切换单位)
-      const rc = carConvPct(Number(cyc.remaining_pct), cap);
-      const cv = $('#car-center-value');
-      const cl = $('#car-center-label');
-      cv.textContent = rc.v === null ? '—' : `${fmtNum(rc.v, rc.dec)} ${rc.unit}`;
-      cl.textContent = cyc.active ? '当前剩余' : '周期末剩余';
-      cv.setAttribute('x', bands.remaining.mid.toFixed(1));
-      cl.setAttribute('x', bands.remaining.mid.toFixed(1));
-
-      /* --- 引线标注:各段数值直接连到车身上(上侧 3 段 / 下侧 3 段) --- */
-      calloutBox.textContent = '';
-      linksSvg.textContent = '';
-      const stage = $('.car-stage');
-      const rSt = stage.getBoundingClientRect();
-      const rSvg = $('.car-svg').getBoundingClientRect();
-      const toX = (x) => (rSvg.left - rSt.left + x / 460 * rSvg.width) / rSt.width * 100;
-      const toY = (y) => (rSvg.top - rSt.top + y / 340 * rSvg.height) / rSt.height * 100;
-      const calls = [
-        { k: 'uncharged', name: '本次未充', pct: Number(cyc.uncharged_pct), side: 'top', hatch: true },
-        { k: 'climate', name: '驻车空调', pct: Number(cyc.climate_pct), side: 'top', color: 'var(--series-4)' },
-        { k: 'drive', name: '行驶', pct: Number(cyc.drive_pct), side: 'top', color: 'var(--cat-drive)' },
-        { k: 'idle', name: '驻车耗电', pct: Number(cyc.idle_pct), side: 'bot', color: 'var(--cat-idle)' },
-        { k: 'sentry', name: '哨兵', pct: Number(cyc.sentry_pct), side: 'bot', color: 'var(--cat-sentry)' },
-        { k: 'remaining', name: cyc.active ? '当前剩余' : '周期末剩余', pct: Number(cyc.remaining_pct), side: 'bot', color: 'var(--series-1)' },
-      ];
-      const gap = isNarrow() ? 24 : 14;  // 同侧标注最小间距(舞台宽 %)
-      const SVGNS = 'http://www.w3.org/2000/svg';
-      ['top', 'bot'].forEach((side) => {
-        const grp = calls.filter((c) => c.side === side).map((c) => Object.assign({}, c, {
-          ax: toX(bands[c.k].mid),
-          ay: toY(side === 'top' ? edgeY(POLY_TOP, bands[c.k].mid) : edgeY(POLY_BOT, bands[c.k].mid)),
-        })).sort((a, b) => a.ax - b.ax);
-        // 最小间距重分布:先正向排开,超出右界再整体回压(两侧避让轮子面板)
-        let x = 17;
-        grp.forEach((c) => { c.lx = Math.max(x, c.ax); x = c.lx + gap; });
-        if (x - gap > 79) {
-          x = 79;
-          for (let i = grp.length - 1; i >= 0; i--) {
-            grp[i].lx = Math.min(x, grp[i].lx);
-            x = grp[i].lx - gap;
-          }
-        }
-        const ty = side === 'top'
-          ? 46 / rSt.height * 100
-          : (rSt.height - 46) / rSt.height * 100;
-        grp.forEach((c) => {
-          const d = el('div', `car-callout cc-${side}`);
-          d.style.left = c.lx + '%';
-          const name = el('b');
-          const dot = el('span', 'cc-dot' + (c.hatch ? ' dot-hatch' : ''));
-          if (c.color) dot.style.background = c.color;
-          name.appendChild(dot);
-          name.appendChild(document.createTextNode(c.name));
-          d.appendChild(name);
-          const conv = carConvPct(c.pct, cap);
-          d.appendChild(el('span', 'cc-val', carModeEffective() === 'pct'
-            ? `${fmtNum(c.pct, 1)}%`
-            : `${conv.v === null ? '—' : `${fmtNum(conv.v, conv.dec)} ${conv.unit}`} · ${fmtNum(c.pct, 1)}%`));
-          calloutBox.appendChild(d);
-          const path = document.createElementNS(SVGNS, 'path');
-          path.setAttribute('class', 'leader');
-          path.setAttribute('d', side === 'top'
-            ? `M ${c.ax} ${c.ay} L ${c.ax} ${ty + 4} L ${c.lx} ${ty}`
-            : `M ${c.ax} ${c.ay} L ${c.ax} ${ty - 4} L ${c.lx} ${ty}`);
-          linksSvg.appendChild(path);
-          const dotP = document.createElementNS(SVGNS, 'path');
-          dotP.setAttribute('class', 'leader-dot');
-          dotP.setAttribute('d', `M ${c.ax} ${c.ay} l 0.01 0`);
-          linksSvg.appendChild(dotP);
-        });
+        l.setAttribute('y1', boundsY[i].toFixed(1));
+        l.setAttribute('y2', boundsY[i].toFixed(1));
       });
     }
+
+    /* --- 两侧图例:左列 未充/驻车耗电/驻车空调,右列 哨兵/行驶/剩余 --- */
+    const cap = cyc && cyc.cap_kwh ? Number(cyc.cap_kwh) : 84;
+    const itemsL = [
+      { k: 'uncharged', name: '本次未充', pct: cyc ? Number(cyc.uncharged_pct) : null, hatch: true },
+      { k: 'idle', name: '驻车耗电', pct: cyc ? Number(cyc.idle_pct) : null, color: 'var(--cat-idle)' },
+      { k: 'climate', name: '驻车空调', pct: cyc ? Number(cyc.climate_pct) : null, color: 'var(--series-4)' },
+    ];
+    const itemsR = [
+      { k: 'sentry', name: '哨兵', pct: cyc ? Number(cyc.sentry_pct) : null, color: 'var(--cat-sentry)' },
+      { k: 'drive', name: '行驶', pct: cyc ? Number(cyc.drive_pct) : null, color: 'var(--cat-drive)' },
+      { k: 'remaining', name: cyc && !cyc.active ? '周期末剩余' : '当前剩余',
+        pct: cyc ? Number(cyc.remaining_pct) : null, color: 'var(--series-1)' },
+    ];
+    const fillCol = (id, items) => {
+      const box = $(id);
+      box.textContent = '';
+      items.forEach((it) => {
+        const d = el('div', 'cl-item');
+        d.dataset.k = it.k;
+        d.style.setProperty('--cl-c', it.color || 'var(--baseline)');
+        if (carSel === it.k) d.classList.add('on');
+        const dot = el('span', 'cl-dot' + (it.hatch ? ' dot-hatch' : ''));
+        if (it.color) dot.style.background = it.color;
+        d.appendChild(dot);
+        const tx = el('div');
+        tx.appendChild(el('b', '', it.name));
+        if (it.pct === null || carModeEffective() === 'pct') {
+          tx.appendChild(el('span', 'cl-val', it.pct === null ? '—' : `${fmtNum(it.pct, 1)}%`));
+        } else {
+          const conv = carConvPct(it.pct, cap);
+          tx.appendChild(el('span', 'cl-val',
+            conv.v === null ? '—' : `${fmtNum(conv.v, conv.dec)} ${conv.unit}`));
+          tx.appendChild(el('span', 'cl-sub', `${fmtNum(it.pct, 1)}%`));
+        }
+        d.appendChild(tx);
+        box.appendChild(d);
+      });
+    };
+    fillCol('#car-legend-l', itemsL);
+    fillCol('#car-legend-r', itemsR);
+
 
     /* --- 电池健康 --- */
     const stats = $('#car-health-stats');
@@ -1283,6 +1261,14 @@
       const data = (w[key] || []).map((p) => [Number(p[0]), Number(p[1])]);
       const valEl = $(`#tpms-val-${key}`);
       if (valEl) valEl.textContent = data.length ? fmtNum(data[data.length - 1][1], 1) : '—';
+      // 胎压上报量化为 0.1 bar 的阶梯:9 点滑动平均后再平滑,视觉上更柔和
+      const sm = data.map((p, i) => {
+        let s = 0, n = 0;
+        for (let j = Math.max(0, i - 4); j <= Math.min(data.length - 1, i + 4); j++) {
+          s += data[j][1]; n++;
+        }
+        return [p[0], Math.round(s / n * 100) / 100];
+      });
       const ch = charts[cid];
       if (!ch) return;
       const color = cssVar(colorVar);
@@ -1304,8 +1290,8 @@
         xAxis: { type: 'time', show: false },
         yAxis: { type: 'value', show: false, scale: true },
         series: [{
-          type: 'line', data, smooth: 0.55, showSymbol: false,
-          lineStyle: { width: 1.6, color },
+          type: 'line', data: sm, smooth: true, smoothMonotone: 'x', showSymbol: false,
+          lineStyle: { width: 1.6, color, cap: 'round' },
           areaStyle: {
             color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
               { offset: 0, color: color + '59' },
@@ -2016,7 +2002,7 @@
         api('system'),
         api('battery/health'),
         api(`charging/sessions?days=${S.days}`),
-        api('energy/cycles'),
+        api('energy/cycles?limit=10'),
       ]);
       S.overview = {
         ...o,
@@ -2103,15 +2089,28 @@
       renderCar();
     });
 
-    // 充电周期切换:‹ 上一次(更早)/ 后一次(更近)›
-    $('#cycle-prev').addEventListener('click', () => {
-      S.cycleIdx += 1;
+    // 充电周期横条:点选芯片切换周期
+    $('#cycle-strip').addEventListener('click', (e) => {
+      const b = e.target.closest('.cyc-chip');
+      if (!b) return;
+      S.cycleIdx = Number(b.dataset.idx);
       renderCar();
+      b.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
     });
-    $('#cycle-next').addEventListener('click', () => {
-      S.cycleIdx = Math.max(0, S.cycleIdx - 1);
-      renderCar();
+
+    // 俯视图分段 ⇄ 图例:点击互相定位高亮
+    $('.car-svg').addEventListener('click', (e) => {
+      const r = e.target.closest('rect[id^="carfill-"]');
+      if (!r) { setCarSel(null); return; }
+      const k = r.id.replace('carfill-', '');
+      setCarSel(carSel === k ? null : k);
     });
+    document.querySelectorAll('.car-legend').forEach((box) =>
+      box.addEventListener('click', (e) => {
+        const d = e.target.closest('.cl-item');
+        if (!d) return;
+        setCarSel(carSel === d.dataset.k ? null : d.dataset.k);
+      }));
 
     $('#range-seg').addEventListener('click', (e) => {
       const btn = e.target.closest('button');

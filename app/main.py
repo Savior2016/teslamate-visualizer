@@ -1249,6 +1249,7 @@ def energy_cycles(car_id: int | None = Query(default=None),
                   limit: int = Query(default=6, ge=1, le=20)):
     """按充电周期划分能量去向:每次充电结束 → 下次充电开始(进行中的周期到现在)。
 
+    相邻两次充电间隔 <30 分钟或间隔内无行驶的,合并为同一周期(充电中断续充)。
     每段:充至电量 level_after;未充 = 100 - level_after;周期内行驶能耗按
     理想续航差值 × 校准系数折算;哨兵/驻车空调/驻车(休眠)耗电由电量采样分段
     (_split_segments),单位均为电池 %。周期末剩余 = 下次充电起始电量,
@@ -1268,7 +1269,7 @@ def energy_cycles(car_id: int | None = Query(default=None),
         ORDER BY cp.start_date DESC
         LIMIT %s
         """,
-        (cid, limit + 1),  # 多取一次,用于界定最旧周期的期末剩余
+        (cid, limit * 3 + 3),  # 多取:零碎充电会被合并,且最旧一组需要下一次充电界定期末剩余
     )
     if not charges:
         return {"cycles": []}
@@ -1320,13 +1321,32 @@ def energy_cycles(car_id: int | None = Query(default=None),
         drives.append((int(d["start_date_ts"]), int(d["end_date_ts"]), kwh))
 
     now_ms = int(time.time() * 1000)
+
+    # 分组:相邻两次充电间隔 <30 分钟或间隔内没有行驶 → 合并为同一周期
+    # (例如充电中断后马上续充,或插上电未开走又补电)
+    groups = []
+    for c in charges:
+        if groups:
+            prev_end = int(groups[-1][-1]["end_date_ts"])
+            gap = int(c["start_date_ts"]) - prev_end
+            drove = any(a < int(c["start_date_ts"]) and b > prev_end
+                        for a, b, _ in drives)
+            if gap < 30 * 60 * 1000 or not drove:
+                groups[-1].append(c)
+                continue
+        groups.append([c])
+
     cycles_all = []
-    for i, c in enumerate(charges):
-        s = int(c["end_date_ts"])
-        nxt = charges[i + 1] if i + 1 < len(charges) else None
+    for gi, grp in enumerate(groups):
+        first, last = grp[0], grp[-1]
+        s = int(first["end_date_ts"])
+        nxt = groups[gi + 1][0] if gi + 1 < len(groups) else None
         e = int(nxt["start_date_ts"]) if nxt else now_ms
         cyc_samples = [smp for smp in samples if s <= smp[0] <= e]
+        # 挖除行驶与(被合并进来的)中途充电区间,避免电量跳变污染耗电归因
         cyc_iv = [(a, b) for a, b, _ in drives if a < e and b > s]
+        cyc_iv += [(int(c["start_date_ts"]), int(c["end_date_ts"]))
+                   for c in grp[1:]]
         seg = _split_segments(cyc_samples, cyc_iv)
         sentry_pct = max(0.0, -sum(p["delta"] for p in seg["sentry"]))
         climate_pct = max(0.0, -sum(p["delta"] for p in seg["idle"]
@@ -1334,16 +1354,25 @@ def energy_cycles(car_id: int | None = Query(default=None),
         idle_pct = max(0.0, -sum(p["delta"] for p in seg["idle"]
                                  if p["kind"] != "climate"))
         drive_kwh = sum(k for a, _, k in drives if s <= a < e)
-        cap = cap_of(c) or current_cap
-        level_after = int(c["end_battery_level"])
+        # 合并组的满电容量:总充电量 ÷ 总增幅,比单次更稳
+        cap = None
+        delta_grp = int(last["end_battery_level"]) - int(first["start_battery_level"])
+        added_grp = sum(float(c["charge_energy_added"] or 0) for c in grp)
+        if delta_grp >= 10 and added_grp > 0:
+            cap_g = added_grp / delta_grp * 100
+            if 30 <= cap_g <= 150:
+                cap = round(cap_g, 1)
+        cap = cap or cap_of(last) or current_cap
+        level_after = int(last["end_battery_level"])
         remaining = int(nxt["start_battery_level"]) if nxt else usable_now
         if remaining is None:  # 无最新电量:用残差兜底
             remaining = max(0.0, level_after - drive_kwh / cap * 100
                             - sentry_pct - climate_pct - idle_pct)
         cycles_all.append({
-            "charge_id": c["id"],
-            "charge_end_ts": s,
-            "charge_end_local": c["end_date_local"],
+            "charge_id": last["id"],
+            "charge_count": len(grp),
+            "charge_end_ts": int(last["end_date_ts"]),
+            "charge_end_local": last["end_date_local"],
             "level_after": level_after,
             "uncharged_pct": max(0, 100 - level_after),
             "cap_kwh": cap,

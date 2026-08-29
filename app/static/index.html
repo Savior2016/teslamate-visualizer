@@ -68,28 +68,23 @@
       <div class="card-head">
         <div>
           <h2>车辆总览</h2>
-          <div class="card-sub">车身为一次充电周期的能量去向,车头(左)为满电端、斜纹为本次未充部分,引线标注各段数值;‹ › 切换充电周期,四轮为胎压与近期变化曲线</div>
         </div>
         <div class="card-head-right">
-          <div class="cycle-nav" id="cycle-nav" hidden>
-            <button id="cycle-prev" type="button" title="上一次充电周期">‹</button>
-            <span class="cycle-label" id="cycle-label">—</span>
-            <button id="cycle-next" type="button" title="后一次充电周期">›</button>
-          </div>
           <div class="seg mini" id="car-mode-seg" role="group" aria-label="电量/度数/里程切换">
             <button data-mode="pct" class="on">电量 %</button>
             <button data-mode="kwh">度数 kWh</button>
             <button data-mode="km">里程 km</button>
           </div>
-          <div class="mini-stats" id="car-health-stats"></div>
         </div>
       </div>
+      <div class="cycle-strip" id="cycle-strip" hidden></div>
       <div class="carview">
+        <div class="car-legend car-legend-l" id="car-legend-l"></div>
         <div class="car-stage">
-          <svg class="car-svg" viewBox="0 0 460 340" role="img" aria-label="车辆俯视图能耗分布">
+          <svg class="car-svg" viewBox="0 0 340 460" role="img" aria-label="车辆俯视图能耗分布">
             <defs>
               <clipPath id="car-body-clip">
-                <path d="M24 170 L40 128 L74 112 L108 96 L170 96 L178 104 L252 110 L310 96 L382 98 L392 104 L436 108 L436 232 L392 236 L382 242 L310 244 L252 230 L178 236 L170 244 L108 244 L74 228 L40 212 Z"/>
+                <path d="M170 24 L128 40 L112 74 L96 108 L96 170 L104 178 L110 252 L96 310 L98 382 L104 392 L108 436 L232 436 L236 392 L242 382 L244 310 L230 252 L236 178 L244 170 L244 108 L228 74 L212 40 Z"/>
               </clipPath>
               <pattern id="car-hatch" width="7" height="7" patternUnits="userSpaceOnUse"
                        patternTransform="rotate(45)">
@@ -98,48 +93,35 @@
               </pattern>
             </defs>
             <!-- HUD 角标 -->
-            <path class="car-hud" d="M8 26 L8 8 L26 8 M434 8 L452 8 L452 26
-                                     M452 314 L452 332 L434 332 M26 332 L8 332 L8 314"/>
-            <!-- 轮胎(车身下层,四轮拱处的深色块) -->
-            <path class="car-tire" d="M112 82 L160 82 L166 96 L106 96 Z M112 258 L160 258 L166 244 L106 244 Z
-                                      M314 82 L372 82 L378 96 L308 96 Z M314 258 L372 258 L378 244 L308 244 Z"/>
+            <path class="car-hud" d="M26 8 L8 8 L8 26 M8 434 L8 452 L26 452
+                                     M314 452 L332 452 L332 434 M332 26 L332 8 L314 8"/>
+            <!-- 轮胎(车身下层,四轮拱处的深色块;车头朝上) -->
+            <path class="car-tire" d="M82 112 L82 160 L96 166 L96 106 Z M258 112 L258 160 L244 166 L244 106 Z
+                                      M82 314 L82 372 L96 378 L96 308 Z M258 314 L258 372 L244 378 L244 308 Z"/>
             <!-- 车身底色(空槽) -->
-            <path class="car-body-base" d="M24 170 L40 128 L74 112 L108 96 L170 96 L178 104 L252 110 L310 96 L382 98 L392 104 L436 108 L436 232 L392 236 L382 242 L310 244 L252 230 L178 236 L170 244 L108 244 L74 228 L40 212 Z"/>
-            <!-- 能量占比分带(自左向右:未充 / 驻车耗电 / 驻车空调 / 哨兵 / 行驶 / 剩余) -->
+            <path class="car-body-base" d="M170 24 L128 40 L112 74 L96 108 L96 170 L104 178 L110 252 L96 310 L98 382 L104 392 L108 436 L232 436 L236 392 L242 382 L244 310 L230 252 L236 178 L244 170 L244 108 L228 74 L212 40 Z"/>
+            <!-- 能量占比分带(自上而下:未充 / 驻车耗电 / 驻车空调 / 哨兵 / 行驶 / 剩余) -->
             <g clip-path="url(#car-body-clip)">
-              <rect id="carfill-uncharged" x="24" y="0" width="0" height="340" fill="url(#car-hatch)"/>
-              <rect id="carfill-idle" class="carfill-idle" x="24" y="0" width="0" height="340"/>
-              <rect id="carfill-climate" class="carfill-climate" x="24" y="0" width="0" height="340"/>
-              <rect id="carfill-sentry" class="carfill-sentry" x="24" y="0" width="0" height="340"/>
-              <rect id="carfill-drive" class="carfill-drive" x="24" y="0" width="0" height="340"/>
-              <rect id="carfill-remaining" class="carfill-remaining" x="24" y="0" width="0" height="340"/>
-              <line id="carsep-1" class="carsep carsep-limit" x1="24" x2="24" y1="40" y2="300"/>
-              <line id="carsep-2" class="carsep" x1="24" x2="24" y1="40" y2="300"/>
-              <line id="carsep-3" class="carsep" x1="24" x2="24" y1="40" y2="300"/>
-              <line id="carsep-4" class="carsep" x1="24" x2="24" y1="40" y2="300"/>
-              <line id="carsep-5" class="carsep" x1="24" x2="24" y1="40" y2="300"/>
+              <rect id="carfill-uncharged" x="0" y="24" width="340" height="0" fill="url(#car-hatch)"/>
+              <rect id="carfill-idle" class="carfill-idle" x="0" y="24" width="340" height="0"/>
+              <rect id="carfill-climate" class="carfill-climate" x="0" y="24" width="340" height="0"/>
+              <rect id="carfill-sentry" class="carfill-sentry" x="0" y="24" width="340" height="0"/>
+              <rect id="carfill-drive" class="carfill-drive" x="0" y="24" width="340" height="0"/>
+              <rect id="carfill-remaining" class="carfill-remaining" x="0" y="24" width="340" height="0"/>
+              <line id="carsep-1" class="carsep carsep-limit" x1="46" x2="294" y1="24" y2="24"/>
+              <line id="carsep-2" class="carsep" x1="46" x2="294" y1="24" y2="24"/>
+              <line id="carsep-3" class="carsep" x1="46" x2="294" y1="24" y2="24"/>
+              <line id="carsep-4" class="carsep" x1="46" x2="294" y1="24" y2="24"/>
+              <line id="carsep-5" class="carsep" x1="46" x2="294" y1="24" y2="24"/>
             </g>
-            <!-- 玻璃舱(半透明罩在分带上) -->
-            <path class="car-glass" d="M108 148 L108 192 L178 218 L274 212 L274 128 L178 122 Z"/>
-            <!-- 切面棱线:挡风玻璃 / 舱尾 / 前备箱缝 / 尾灯条 -->
-            <path class="car-detail" d="M178 122 L178 218 M274 128 L274 212 M74 116 L74 224 M422 112 L422 228"/>
-            <path class="car-detail" d="M40 128 L108 148 M40 212 L108 192"/>
-            <path class="car-detail car-spine" d="M24 170 L104 170"/>
-            <!-- 中央剩余电量读数(置于剩余带中点) -->
-            <text id="car-center-value" class="car-center-value" x="350" y="164" text-anchor="middle">—</text>
-            <text id="car-center-label" class="car-center-label" x="350" y="186" text-anchor="middle">当前剩余</text>
-            <!-- 电量刻度(25 / 50 / 75%) -->
-            <path class="car-gauge" d="M127 254 L127 264 M230 254 L230 264 M333 254 L333 264"/>
-            <text class="car-gauge-label" x="127" y="278" text-anchor="middle">75</text>
-            <text class="car-gauge-label" x="230" y="278" text-anchor="middle">50</text>
-            <text class="car-gauge-label" x="333" y="278" text-anchor="middle">25</text>
+            <!-- 电量刻度(75 / 50 / 25%,车身右侧) -->
+            <path class="car-gauge" d="M254 127 L266 127 M254 230 L266 230 M254 333 L266 333"/>
+            <text class="car-gauge-label" x="272" y="130">75</text>
+            <text class="car-gauge-label" x="272" y="233">50</text>
+            <text class="car-gauge-label" x="272" y="336">25</text>
             <!-- 车身描边(顶层,硬朗斜切角) -->
-            <path class="car-body-line" d="M24 170 L40 128 L74 112 L108 96 L170 96 L178 104 L252 110 L310 96 L382 98 L392 104 L436 108 L436 232 L392 236 L382 242 L310 244 L252 230 L178 236 L170 244 L108 244 L74 228 L40 212 Z"/>
+            <path class="car-body-line" d="M170 24 L128 40 L112 74 L96 108 L96 170 L104 178 L110 252 L96 310 L98 382 L104 392 L108 436 L232 436 L236 392 L242 382 L244 310 L230 252 L236 178 L244 170 L244 108 L228 74 L212 40 Z"/>
           </svg>
-          <svg class="car-links" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg>
-          <div class="car-callouts"></div>
-        </div>
-        <div class="wheel-row">
           <div class="wheel wheel-fl">
             <div class="wheel-head"><span>左前</span><b id="tpms-val-fl">—</b><span class="wheel-unit">bar</span></div>
             <div class="wheel-chart" id="chart-wfl"></div>
@@ -157,11 +139,19 @@
             <div class="wheel-chart" id="chart-wrr"></div>
           </div>
         </div>
-        <div class="car-side">
-          <h3 class="car-side-title">满电容量估算(按每次充电)</h3>
-          <div class="chart chart-health" id="chart-health"></div>
-        </div>
+        <div class="car-legend car-legend-r" id="car-legend-r"></div>
       </div>
+    </div>
+
+    <div class="card col-12" id="bh-card">
+      <div class="card-head">
+        <div>
+          <h2>电池健康</h2>
+          <div class="card-sub">按每次充电估算满电容量(充电量 ÷ 表显电量增幅),虚线为历史基准(90 分位)</div>
+        </div>
+        <div class="mini-stats" id="car-health-stats"></div>
+      </div>
+      <div class="chart chart-health" id="chart-health"></div>
     </div>
 
     <div class="card col-12" id="cs-card">
@@ -255,6 +245,8 @@
       <div class="card-sub">四轮胎压(bar),仅车辆清醒时段上报</div>
       <div class="chart" id="chart-tpms"></div>
     </div>
+
+  </div>
   </div>
 
   <section class="kpis" id="kpis"></section>
