@@ -1045,6 +1045,32 @@
     }), { notMerge: true });
   }
 
+  /* ---------- 渲染:车内 / 车外温度 ---------- */
+
+  function renderTemp() {
+    const o = S.overview;
+    if (!o || !charts.temp || !o.temp) return;
+    const mk = (arr) => (arr || []).map((p) => [Number(p[0]), Number(p[1])]);
+    charts.temp.setOption(Object.assign({}, chartTheme(), {
+      tooltip: tooltipAxis({ '车内': '°C', '车外': '°C' }, (v) => fmtTime(v, true)),
+      legend: {
+        top: 0, left: 6, itemWidth: 14, itemHeight: 8, itemGap: isNarrow() ? 10 : 14,
+        textStyle: { color: cssVar('--text-secondary'), fontSize: 12 },
+      },
+      grid: trendGrid(34),
+      xAxis: timeAxis(S.days),
+      yAxis: Object.assign(axisCommon(), {
+        type: 'value', scale: true,
+        axisLabel: { color: cssVar('--text-muted'), fontSize: 11, formatter: '{value}°' },
+      }),
+      series: [
+        // 车内暖色 / 车外冷色(参考调色板 series-2 橙 / series-1 蓝)
+        lineSeries('车内', mk(o.temp.inside), cssVar('--series-2')),
+        lineSeries('车外', mk(o.temp.outside), cssVar('--series-1')),
+      ],
+    }), { notMerge: true });
+  }
+
   /* ---------- 渲染:车辆总览(俯视图 + 能耗占比 + 四轮胎压 + 电池健康) ---------- */
 
   // 本卡片独立的三态切换:电量 % / 度数 kWh / 里程 km
@@ -1989,7 +2015,7 @@
     try {
       const o = await api('overview');
       if (S.carId === null) S.carId = o.car_id;
-      const [trend, daily, recent, chg, routes, act, eff, tpms, costs, sys, health, sessions, cyc] = await Promise.all([
+      const [trend, daily, recent, chg, routes, act, eff, tpms, costs, sys, health, sessions, cyc, temp] = await Promise.all([
         api(`trend?days=${S.days}`),
         api(`drives/daily?days=${S.days}`),
         api('drives/recent?limit=10'),
@@ -2003,6 +2029,7 @@
         api('battery/health'),
         api(`charging/sessions?days=${S.days}`),
         api('energy/cycles?limit=10'),
+        api(`temp/trend?days=${S.days}`),
       ]);
       S.overview = {
         ...o,
@@ -2017,6 +2044,7 @@
         efficiency: eff,
         tpms,
         costs,
+        temp,
       };
       S.health = health;
       S.sessions = sessions;
@@ -2040,6 +2068,7 @@
       renderSentry();
       renderEfficiency();
       renderTpms();
+      renderTemp();
     } catch (err) {
       $('#state-text').textContent = '数据连接失败';
       $('#updated-at').textContent = 'API 请求失败,稍后自动重试';
@@ -2053,7 +2082,7 @@
     renderDaily(); renderCharging(); renderTable();
     renderRoutes(); renderRoutesList(); renderCosts();
     renderActivity(); renderEvents(); renderSentry();
-    renderEfficiency(); renderTpms(); renderCar(); renderSessions(); renderChargers();
+    renderEfficiency(); renderTpms(); renderCar(); renderSessions(); renderChargers(); renderTemp();
   }
 
   /* ---------- 初始化 ---------- */
@@ -2069,6 +2098,7 @@
     charts.sentryDrain = echarts.init($('#chart-sentry-drain'));
     charts.efficiency = echarts.init($('#chart-efficiency'));
     charts.tpms = echarts.init($('#chart-tpms'));
+    charts.temp = echarts.init($('#chart-temp'));
     charts.health = echarts.init($('#chart-health'));
     charts.wfl = echarts.init($('#chart-wfl'));
     charts.wfr = echarts.init($('#chart-wfr'));

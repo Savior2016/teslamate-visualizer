@@ -1419,5 +1419,35 @@ def tpms_trend(car_id: int | None = Query(default=None),
     return {"days": days, "step_seconds": step, "wheels": wheels}
 
 
+@app.get("/api/temp/trend")
+def temp_trend(car_id: int | None = Query(default=None),
+               days: int = Query(default=7, ge=1, le=30)):
+    """车内/车外温度(°C)时间轴,按分桶取首条降采样;仅车辆清醒时段上报。"""
+    cid = get_car_id(car_id)
+    step = 120 if days <= 2 else 300 if days <= 7 else 900
+    rows = q(
+        """
+        SELECT DISTINCT ON (b) date, inside_temp, outside_temp
+        FROM (
+            SELECT date, inside_temp, outside_temp,
+                   floor(extract(epoch FROM date) / %s)::bigint AS b
+            FROM positions
+            WHERE car_id = %s AND date >= now() - make_interval(days => %s)
+              AND (inside_temp IS NOT NULL OR outside_temp IS NOT NULL)
+        ) t
+        ORDER BY b, date
+        """,
+        (step, cid, days),
+    )
+    inside, outside = [], []
+    for r in rows:
+        ts = _utc_ms(r["date"])
+        if r["inside_temp"] is not None:
+            inside.append([ts, float(r["inside_temp"])])
+        if r["outside_temp"] is not None:
+            outside.append([ts, float(r["outside_temp"])])
+    return {"days": days, "step_seconds": step, "inside": inside, "outside": outside}
+
+
 app.mount("/", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static"),
                            html=True), name="static")
