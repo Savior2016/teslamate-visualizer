@@ -923,6 +923,135 @@ button { touch-action: manipulation; }
 
 .cost-input::placeholder { color: var(--text-muted); }
 
+/* ===== 充电详情(卡片式,纵向布局,适配手机) ===== */
+.cs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cs-item {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px 12px;
+  background: var(--page);
+}
+
+.cs-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px dashed var(--border);
+}
+
+.cs-time {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.cs-time b { font-weight: 600; }
+
+.cs-time-sub { font-size: 11px; color: var(--cat-charge); }
+
+.cs-charger {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-end;
+  min-width: 0;
+}
+
+.cs-charger input {
+  font: inherit;
+  color: var(--text-primary);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  outline: none;
+  text-align: right;
+  max-width: 200px;
+  padding: 2px 6px;
+}
+
+.cs-charger input:hover { border-color: var(--border); }
+
+.cs-charger input:focus {
+  border-color: var(--series-1);
+  background: var(--page);
+}
+
+.cs-charger input:disabled { opacity: 0.55; }
+
+.cs-charger input::placeholder { color: var(--text-muted); }
+
+.cs-name-input { font-size: 14px; font-weight: 600; }
+
+/* 地点:充电桩名称下方的小字 */
+.cs-loc-input { font-size: 11px; color: var(--text-muted); }
+
+.cs-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 16px;
+}
+
+.cs-field {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 13px;
+  padding: 3px 0;
+}
+
+.cs-label { color: var(--text-muted); flex-shrink: 0; }
+
+.cs-val {
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.cs-inline {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.cs-unit { font-size: 11px; color: var(--text-muted); }
+
+.cs-tag {
+  font-size: 10px;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 0 4px;
+  line-height: 1.5;
+}
+
+.cs-tag-manual { color: var(--cat-charge); border-color: var(--cat-charge); }
+
+.cs-item .cost-input { width: 84px; padding: 3px 6px; }
+
+@media (max-width: 600px) {
+  .cs-item { padding: 9px 10px 10px; }
+  .cs-head { flex-direction: column; gap: 6px; }
+  .cs-charger { align-items: stretch; width: 100%; }
+  .cs-charger input { text-align: left; max-width: none; }
+  .cs-fields { gap: 4px 8px; }
+  .cs-field { font-size: 12px; gap: 6px; }
+  .cs-item .cost-input { width: 56px; padding: 3px 4px; font-size: 12px; }
+  .cs-inline { gap: 3px; }
+  .cs-tag { font-size: 9px; padding: 0 3px; }
+}
+
 /* ===== 地图轨迹列表 ===== */
 #routes-list { margin-top: 10px; }
 

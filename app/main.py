@@ -66,6 +66,13 @@ DEFAULT_KWH_PER_PCT = 0.75
 COST_FILE = os.environ.get("COST_FILE", "/data/charge_costs.json")
 _cost_lock = threading.Lock()
 
+# 「充电详情」模块的用户补充数据:
+# charges  → {charge_id: {"total_kwh": 桩端计费总耗电(含损耗),手填}}
+# chargers → {位置键 addr_<address_id>/geo_<geofence_id>: {"name", "location"}},
+#            同一地点的充电自动带出上次填写的充电桩信息
+EXTRAS_FILE = os.environ.get("EXTRAS_FILE", "/data/charge_extras.json")
+_extras_lock = threading.Lock()
+
 pool: ConnectionPool | None = None
 
 
@@ -90,6 +97,42 @@ def _save_cost(charge_id: int, cost: float) -> dict[str, float]:
             json.dump(costs, f, ensure_ascii=False)
         os.replace(tmp, COST_FILE)
     return costs
+
+
+def _load_extras() -> dict:
+    """读取充电详情补充数据,文件缺失/损坏时返回空结构。"""
+    try:
+        with open(EXTRAS_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            raise ValueError
+        return {
+            "charges": {str(k): v for k, v in (data.get("charges") or {}).items()
+                        if isinstance(v, dict)},
+            "chargers": {str(k): v for k, v in (data.get("chargers") or {}).items()
+                         if isinstance(v, dict)},
+        }
+    except (OSError, ValueError, TypeError, AttributeError):
+        return {"charges": {}, "chargers": {}}
+
+
+def _save_extras(data: dict) -> None:
+    """原子写入充电详情补充数据。"""
+    with _extras_lock:
+        tmp = EXTRAS_FILE + ".tmp"
+        os.makedirs(os.path.dirname(EXTRAS_FILE) or ".", exist_ok=True)
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False)
+        os.replace(tmp, EXTRAS_FILE)
+
+
+def _loc_key(address_id, geofence_id) -> str | None:
+    """充电地点的稳定键:优先地址,其次地理围栏;都没有则无法跨次自动带出。"""
+    if address_id is not None:
+        return f"addr_{address_id}"
+    if geofence_id is not None:
+        return f"geo_{geofence_id}"
+    return None
 
 
 @asynccontextmanager
@@ -669,6 +712,149 @@ def set_charging_cost(payload: ChargeCostIn):
         raise HTTPException(status_code=422, detail="费用不能为负")
     _save_cost(payload.charge_id, payload.cost)
     return {"ok": True, "charge_id": payload.charge_id, "cost": round(payload.cost, 2)}
+
+
+class ChargeExtraIn(BaseModel):
+    charge_id: int
+    total_kwh: float | None = None  # 桩端计费总耗电(含损耗);null = 清除手填值
+
+
+class ChargerIn(BaseModel):
+    charge_id: int
+    name: str = ""
+    location: str = ""
+
+
+@app.get("/api/charging/sessions")
+def charging_sessions(car_id: int | None = Query(default=None),
+                      days: int = Query(default=30, ge=1, le=730)):
+    """充电详情卡片:每次充电一张卡,含手填的总耗电 / 充电桩名称 / 费用与派生指标。
+
+    电费单价 = 费用 ÷ 总耗电(手填优先,其次车端 charge_energy_used,
+    都没有则退回充电量);充电后每公里费用 = 费用 ÷ 充电后至下次充电的行驶里程。
+    """
+    cid = get_car_id(car_id)
+    since_ms = _utc_ms(datetime.now(timezone.utc) - timedelta(days=days))
+    rows = q(
+        f"""
+        SELECT cp.id, {local_ts('cp.start_date', 'start_date')},
+               {local_ts('cp.end_date', 'end_date')},
+               cp.duration_min, cp.charge_energy_added, cp.charge_energy_used,
+               cp.start_battery_level, cp.end_battery_level,
+               cp.address_id, cp.geofence_id, a.name AS address_name
+        FROM charging_processes cp
+        LEFT JOIN addresses a ON a.id = cp.address_id
+        WHERE cp.car_id = %s
+        ORDER BY cp.start_date
+        LIMIT 500
+        """,
+        (cid,),
+    )
+    costs = _load_costs()
+    extras = _load_extras()
+
+    # 充电后行驶里程:本次充电结束 → 下次充电开始之间的行程距离合计
+    drives = q(
+        f"""
+        SELECT {local_ts('d.start_date', 'start_date')}, d.distance
+        FROM drives d
+        WHERE d.car_id = %s
+        ORDER BY d.start_date
+        """,
+        (cid,),
+    )
+    drive_ts = [int(d["start_date_ts"]) for d in drives]
+
+    out = []
+    for i, r in enumerate(rows):
+        start_ts = int(r["start_date_ts"])
+        if start_ts < since_ms:
+            continue
+        end_ts = int(r["end_date_ts"]) if r["end_date_ts"] is not None else None
+        nxt_start = int(rows[i + 1]["start_date_ts"]) if i + 1 < len(rows) else None
+        seg_end = nxt_start if nxt_start else int(time.time() * 1000)
+        i0 = bisect.bisect_right(drive_ts, end_ts if end_ts is not None else start_ts)
+        i1 = bisect.bisect_right(drive_ts, seg_end)
+        after_km = round(sum(float(drives[j]["distance"] or 0)
+                             for j in range(i0, i1)), 1)
+
+        key = _loc_key(r["address_id"], r["geofence_id"])
+        saved_charger = extras["chargers"].get(key) if key else None
+        extra = extras["charges"].get(str(r["id"])) or {}
+        manual_total = extra.get("total_kwh")
+        used = float(r["charge_energy_used"]) if r["charge_energy_used"] else None
+        energy = float(r["charge_energy_added"]) if r["charge_energy_added"] else None
+        total_kwh = round(float(manual_total), 2) if manual_total is not None else used
+        cost = costs.get(str(r["id"]))
+        # 单价口径:优先总耗电(桩端计费电量),缺失时退回充电量
+        denom = total_kwh if total_kwh and total_kwh > 0 else energy
+        rate = round(cost / denom, 4) if cost is not None and denom else None
+        per_km = (round(cost / after_km, 4)
+                  if cost is not None and after_km > 0 else None)
+        out.append({
+            "id": r["id"],
+            "start_ts": start_ts,
+            "end_ts": end_ts,
+            "start_local": r["start_date_local"],
+            "end_local": r["end_date_local"],
+            "duration_min": r["duration_min"],
+            "energy_kwh": round(energy, 2) if energy is not None else None,
+            "energy_used_kwh": round(used, 2) if used is not None else None,
+            "total_kwh": total_kwh,
+            "total_kwh_manual": manual_total is not None,
+            "start_battery_level": r["start_battery_level"],
+            "end_battery_level": r["end_battery_level"],
+            "loc_key": key,
+            "charger_name": (saved_charger or {}).get("name", ""),
+            "charger_location": (saved_charger or {}).get("location",
+                                                          r["address_name"] or ""),
+            "cost": round(cost, 2) if cost is not None else None,
+            "rate_yuan_kwh": rate,
+            "after_km": after_km,
+            "per_km_yuan": per_km,
+        })
+    out.reverse()  # 新的在前
+    return {"charges": out}
+
+
+@app.post("/api/charging/extras")
+def set_charging_extra(payload: ChargeExtraIn):
+    """录入/清除某次充电的桩端计费总耗电(kWh,含充电损耗)。"""
+    row = q("SELECT id FROM charging_processes WHERE id = %s", (payload.charge_id,))
+    if not row:
+        raise HTTPException(status_code=404, detail="充电会话不存在")
+    if payload.total_kwh is not None and not (0 <= payload.total_kwh <= 500):
+        raise HTTPException(status_code=422, detail="总耗电需在 0–500 kWh 之间")
+    extras = _load_extras()
+    key = str(payload.charge_id)
+    if payload.total_kwh is None:
+        extras["charges"].pop(key, None)
+    else:
+        extras["charges"][key] = {"total_kwh": round(float(payload.total_kwh), 2)}
+    _save_extras(extras)
+    return {"ok": True, "charge_id": payload.charge_id,
+            "total_kwh": extras["charges"].get(key, {}).get("total_kwh")}
+
+
+@app.post("/api/charging/charger")
+def set_charger(payload: ChargerIn):
+    """录入充电桩名称与地点;按充电地点存档,同一地点的后续充电自动带出。"""
+    row = q("SELECT address_id, geofence_id FROM charging_processes WHERE id = %s",
+            (payload.charge_id,))
+    if not row:
+        raise HTTPException(status_code=404, detail="充电会话不存在")
+    key = _loc_key(row[0]["address_id"], row[0]["geofence_id"])
+    if key is None:
+        raise HTTPException(status_code=422, detail="该次充电没有地点信息,无法存档")
+    name = payload.name.strip()[:80]
+    location = payload.location.strip()[:120]
+    extras = _load_extras()
+    if name or location:
+        extras["chargers"][key] = {"name": name, "location": location}
+    else:
+        extras["chargers"].pop(key, None)
+    _save_extras(extras)
+    return {"ok": True, "loc_key": key, "name": name, "location": location}
 
 
 @app.get("/api/routes")

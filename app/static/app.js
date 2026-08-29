@@ -12,6 +12,7 @@
     health: null,
     cycles: null,
     cycleIdx: 0,
+    sessions: null,
     timer: null,
   };
 
@@ -1301,6 +1302,198 @@
     tbl.appendChild(tbody);
   }
 
+  /* ---------- 渲染:充电详情(卡片式,纵向布局,适配手机) ---------- */
+
+  function fmtDur(min) {
+    const m = Number(min);
+    if (!m || m <= 0) return '—';
+    if (m < 60) return `${fmtNum(m, 0)} 分`;
+    return `${Math.floor(m / 60)} 小时 ${fmtNum(m % 60, 0)} 分`;
+  }
+
+  // 保存后定向刷新:sessions 必刷;费用变动还要同步旧费用表与活动事件的金额
+  async function csRefresh(withCosts) {
+    const reqs = [api(`charging/sessions?days=${S.days}`)];
+    if (withCosts) reqs.push(api('charging/costs?days=90'), api(`activity?days=${S.days}`));
+    const [sessions, costs, act] = await Promise.all(reqs);
+    S.sessions = sessions;
+    if (withCosts) {
+      S.overview.costs = costs;
+      S.overview.activity = act;
+    }
+    renderSessions();
+    if (withCosts) { renderCosts(); renderEvents(); renderActivity(); }
+  }
+
+  async function csSave(path, body, inps, withCosts) {
+    try {
+      await fetchJSON(path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      await csRefresh(withCosts);
+    } catch (err) {
+      console.error(err);
+      (inps || []).forEach((inp) => {
+        inp.disabled = false;
+        inp.value = inp.dataset.orig || '';
+        inp.title = '保存失败,请重试';
+      });
+    }
+  }
+
+  function renderSessions() {
+    const box = $('#cs-list');
+    if (!box || !S.sessions) return;
+    box.textContent = '';
+    const charges = S.sessions.charges || [];
+
+    // 概览统计
+    const stats = $('#cs-stats');
+    stats.textContent = '';
+    const stat = (label, value, unit) => {
+      const t = el('span', 'mini-stat');
+      t.appendChild(el('span', '', label + ' '));
+      t.appendChild(el('b', '', String(value)));
+      if (unit) t.appendChild(el('span', '', ' ' + unit));
+      stats.appendChild(t);
+    };
+    if (charges.length) {
+      stat('充电', charges.length, '次');
+      const paid = charges.filter((c) => c.cost !== null && c.cost !== undefined);
+      if (paid.length) {
+        stat('费用合计', fmtNum(paid.reduce((s, c) => s + c.cost, 0), 2), '¥');
+      }
+    }
+    if (!charges.length) {
+      box.appendChild(el('div', 'empty', '所选时间范围内暂无充电记录'));
+      return;
+    }
+
+    charges.forEach((c) => {
+      const item = el('div', 'cs-item');
+
+      /* 头部:充电时间(左)+ 充电桩名称/地点(右,可编辑,同地点自动带出) */
+      const head = el('div', 'cs-head');
+      const timeBox = el('div', 'cs-time');
+      const sameDay = c.end_ts && dayKey(c.start_ts) === dayKey(c.end_ts);
+      timeBox.appendChild(el('b', '', fmtTime(c.start_ts) +
+        (c.end_ts ? ` → ${sameDay ? fmtClock(c.end_ts) : fmtTime(c.end_ts)}` : '')));
+      if (!c.end_ts) timeBox.appendChild(el('span', 'cs-time-sub', '充电中'));
+      head.appendChild(timeBox);
+
+      const chg = el('div', 'cs-charger');
+      const nameInp = el('input', 'cs-name-input');
+      nameInp.type = 'text';
+      nameInp.placeholder = '充电桩名称';
+      nameInp.maxLength = 80;
+      nameInp.value = c.charger_name || '';
+      nameInp.dataset.orig = c.charger_name || '';
+      const locInp = el('input', 'cs-loc-input');
+      locInp.type = 'text';
+      locInp.placeholder = c.loc_key ? '地点' : '地点(本次充电无地点信息,无法存档)';
+      locInp.maxLength = 120;
+      locInp.value = c.charger_location || '';
+      locInp.dataset.orig = c.charger_location || '';
+      const saveCharger = () => {
+        const name = nameInp.value.trim();
+        const loc = locInp.value.trim();
+        if (name === nameInp.dataset.orig && loc === locInp.dataset.orig) return;
+        nameInp.disabled = locInp.disabled = true;
+        csSave('/api/charging/charger',
+          { charge_id: c.id, name, location: loc }, [nameInp, locInp], false);
+      };
+      nameInp.addEventListener('change', saveCharger);
+      locInp.addEventListener('change', saveCharger);
+      chg.appendChild(nameInp);
+      chg.appendChild(locInp);
+      head.appendChild(chg);
+      item.appendChild(head);
+
+      /* 字段区:label + value,两列网格 */
+      const fields = el('div', 'cs-fields');
+      const field = (label, val) => {
+        const f = el('div', 'cs-field');
+        f.appendChild(el('span', 'cs-label', label));
+        const v = el('span', 'cs-val');
+        if (typeof val === 'string') v.textContent = val;
+        else v.appendChild(val);
+        f.appendChild(v);
+        fields.appendChild(f);
+      };
+      const numInput = (placeholder) => {
+        const inp = el('input', 'cost-input');
+        inp.type = 'number';
+        inp.min = '0';
+        inp.step = '0.01';
+        inp.inputMode = 'decimal';
+        inp.placeholder = placeholder;
+        return inp;
+      };
+
+      field('充电量', c.energy_kwh !== null && c.energy_kwh !== undefined
+        ? `${fmtNum(c.energy_kwh, 2)} kWh` : '—');
+
+      // 总耗电(桩端计费电量,含损耗):手填优先,未填显示车端记录值并标注
+      const totalWrap = el('span', 'cs-inline');
+      const totalInp = numInput('未填');
+      if (c.total_kwh !== null && c.total_kwh !== undefined) totalInp.value = c.total_kwh;
+      totalInp.dataset.orig = c.total_kwh !== null && c.total_kwh !== undefined
+        ? String(c.total_kwh) : '';
+      totalInp.addEventListener('change', () => {
+        const raw = totalInp.value.trim();
+        const v = raw === '' ? null : parseFloat(raw);
+        if (raw !== '' && (isNaN(v) || v < 0 || v > 500)) {
+          totalInp.value = totalInp.dataset.orig;
+          return;
+        }
+        if ((v === null ? '' : String(v)) === totalInp.dataset.orig) return;
+        totalInp.disabled = true;
+        csSave('/api/charging/extras', { charge_id: c.id, total_kwh: v }, [totalInp], false);
+      });
+      totalWrap.appendChild(totalInp);
+      totalWrap.appendChild(el('span', 'cs-unit', 'kWh'));
+      if (c.total_kwh !== null && c.total_kwh !== undefined) {
+        totalWrap.appendChild(el('span',
+          c.total_kwh_manual ? 'cs-tag cs-tag-manual' : 'cs-tag',
+          c.total_kwh_manual ? '手填' : '车端'));
+      }
+      field('总耗电', totalWrap);
+
+      // 充电费用(与「充电费用」表共用同一份数据)
+      const costWrap = el('span', 'cs-inline');
+      const costInp = numInput('未填');
+      if (c.cost !== null && c.cost !== undefined) costInp.value = c.cost;
+      costInp.dataset.orig = c.cost !== null && c.cost !== undefined ? String(c.cost) : '';
+      costInp.addEventListener('change', () => {
+        const v = parseFloat(costInp.value);
+        if (isNaN(v) || v < 0) {
+          costInp.value = costInp.dataset.orig;
+          return;
+        }
+        costInp.disabled = true;
+        csSave('/api/charging/costs', { charge_id: c.id, cost: v }, [costInp], true);
+      });
+      costWrap.appendChild(costInp);
+      costWrap.appendChild(el('span', 'cs-unit', '¥'));
+      field('充电费用', costWrap);
+
+      field('电费单价', c.rate_yuan_kwh !== null && c.rate_yuan_kwh !== undefined
+        ? `¥${fmtNum(c.rate_yuan_kwh, 2)} /kWh` : '—');
+      field('起止电量', (c.start_battery_level !== null && c.end_battery_level !== null
+        && c.start_battery_level !== undefined && c.end_battery_level !== undefined)
+        ? `${fmtNum(c.start_battery_level, 0)}% → ${fmtNum(c.end_battery_level, 0)}%` : '—');
+      field('充电时长', fmtDur(c.duration_min));
+      field('充电后行驶里程', `${fmtNum(c.after_km, 1)} km`);
+      field('充电后每公里费用', c.per_km_yuan !== null && c.per_km_yuan !== undefined
+        ? `¥${fmtNum(c.per_km_yuan, 2)} /km` : '—');
+
+      item.appendChild(fields);
+      box.appendChild(item);
+    });
+  }
+
   /* ---------- 渲染:充电费用 ---------- */
 
   async function saveChargeCost(id, cost, inp) {
@@ -1612,7 +1805,7 @@
     try {
       const o = await api('overview');
       if (S.carId === null) S.carId = o.car_id;
-      const [trend, daily, recent, chg, routes, act, eff, tpms, costs, sys, health, cyc] = await Promise.all([
+      const [trend, daily, recent, chg, routes, act, eff, tpms, costs, sys, health, sessions, cyc] = await Promise.all([
         api(`trend?days=${S.days}`),
         api(`drives/daily?days=${S.days}`),
         api('drives/recent?limit=10'),
@@ -1624,6 +1817,7 @@
         api('charging/costs?days=90'),
         api('system'),
         api('battery/health'),
+        api(`charging/sessions?days=${S.days}`),
         api('energy/cycles'),
       ]);
       S.overview = {
@@ -1641,11 +1835,13 @@
         costs,
       };
       S.health = health;
+      S.sessions = sessions;
       S.cycles = cyc;
       $('#state-badge').dataset.state = 'unknown';
       renderSys(sys);
       renderHeader();
       renderCar();
+      renderSessions();
       renderKpis();
       renderTrends();
       renderDaily();
@@ -1672,7 +1868,7 @@
     renderDaily(); renderCharging(); renderTable();
     renderRoutes(); renderRoutesList(); renderCosts();
     renderActivity(); renderEvents(); renderSentry();
-    renderEfficiency(); renderTpms(); renderCar();
+    renderEfficiency(); renderTpms(); renderCar(); renderSessions();
   }
 
   /* ---------- 初始化 ---------- */
