@@ -117,19 +117,28 @@ html, body {
 /* ===== 顶栏 ===== */
 header { margin-bottom: 8px; }
 
-.header-row {
+/* 顶栏主体:左侧一、二行,右侧车图跨两行 */
+.header-main {
   display: flex;
   align-items: center;
+  gap: 16px;
+}
+
+.header-left { flex: 1; min-width: 0; }
+
+.header-row {
+  display: flex;
+  align-items: baseline;
   gap: 12px;
   flex-wrap: wrap;
 }
 
-/* 第一行右侧的车型图片 */
-.header-row .model-icon {
-  margin-left: auto;
-  height: 46px;
-  width: auto;
+/* 车型图片:右侧跨第一、二行,放大显示 */
+.header-main .model-icon {
   flex: none;
+  align-self: center;
+  height: 84px;
+  width: auto;
   display: block;
 }
 
@@ -146,10 +155,13 @@ header h1 {
 header h1:hover { color: var(--series-1); }
 header h1:active { opacity: 0.55; }
 
+/* 车名:与 TESLA Home 区分 —— 次要色、较小字号,细分隔线 */
 .car-name {
-  font-size: 17px;
-  font-weight: 600;
-  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-muted);
+  border-left: 1px solid var(--border);
+  padding-left: 12px;
 }
 
 /* 电量胶囊:图标 + 百分比/续航,点击切换 */
@@ -180,15 +192,22 @@ header h1:active { opacity: 0.55; }
 .batt-pill[data-level="critical"] .batt-fill { fill: #d03b3b; }
 .batt-pill[data-level="unknown"] .batt-fill { fill: var(--text-muted); }
 
-/* 第二行:车名 / 车型徽章 / 电量 / 状态 / 服务器资源 / 版本 / 更新时间 */
+/* 第二行:车型徽章 / 电量 / 状态 / 版本 / 更新时间 */
 .header-sub {
   display: flex;
   align-items: center;
   gap: 8px 14px;
   flex-wrap: wrap;
-  margin-top: 2px;
+  margin-top: 6px;
   font-size: 12.5px;
   color: var(--text-muted);
+}
+
+/* 第三行:服务器资源 */
+.header-sys {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
 }
 
 .car-model-chip {
@@ -256,14 +275,7 @@ header h1:active { opacity: 0.55; }
 
 #sys-stats { font-variant-numeric: tabular-nums; white-space: nowrap; }
 
-.header-sub-right {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.header-sub-right > span { white-space: nowrap; }
+#sw-version, #updated-at { white-space: nowrap; }
 
 .badge {
   display: inline-flex;
@@ -855,11 +867,11 @@ footer a { color: var(--text-muted); }
 @media (max-width: 600px) {
   .grid { gap: 10px; }
 
-  /* 顶栏:第一行标题+车图,第二行信息允许换行 */
-  .header-row { gap: 6px 10px; }
-  .header-row .model-icon { height: 32px; }
+  /* 顶栏:第一行标题+车名,车图右侧跨一、二行,服务器资源第三行 */
+  .header-main { gap: 10px; }
+  .header-main .model-icon { height: 58px; }
   header h1 { font-size: 18px; }
-  .car-name { font-size: 16px; }
+  .car-name { font-size: 14px; padding-left: 10px; }
   .badge { font-size: 12px; padding: 3px 9px; }
   .batt-pill { font-size: 12px; padding: 3px 9px; gap: 6px; }
   .batt-icon { width: 26px; height: 12px; }

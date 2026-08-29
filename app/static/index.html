@@ -12,40 +12,44 @@
 <div class="wrap">
 
   <header>
-    <div class="header-row">
-      <h1 id="title-refresh" title="点击刷新数据">TESLA Home</h1>
+    <div class="header-main">
+      <div class="header-left">
+        <div class="header-row">
+          <h1 id="title-refresh" title="点击刷新数据">TESLA Home</h1>
+          <span class="car-name" id="car-name">—</span>
+        </div>
+        <div class="header-sub">
+          <span id="car-model"><span class="car-model-badge" id="car-model-badge" role="img" aria-label="Model Y L" hidden></span><span id="car-model-text" hidden></span></span>
+          <span class="batt-pill" id="batt-pill" role="button" tabindex="0" data-level="unknown"
+                title="点击切换 电量 / 续航">
+            <svg class="batt-icon" viewBox="0 0 30 14" aria-hidden="true">
+              <rect class="batt-shell" x="1" y="1.5" width="24" height="11" rx="3.5"/>
+              <rect class="batt-cap" x="26.5" y="4.5" width="2.5" height="5" rx="1.2"/>
+              <rect class="batt-fill" id="batt-fill" x="3" y="4" width="0" height="6" rx="1.6"/>
+            </svg>
+            <span id="batt-text">—</span>
+          </span>
+          <span class="badge" id="state-badge" data-state="unknown">
+            <span class="dot"></span><span id="state-text">加载中…</span>
+          </span>
+          <span id="sw-version"></span>
+          <span id="updated-at">加载中…</span>
+        </div>
+      </div>
       <img class="model-icon" src="/model-y-l.png" alt="Model Y L">
     </div>
-    <div class="header-sub">
-      <span class="car-name" id="car-name">—</span>
-      <span id="car-model"><span class="car-model-badge" id="car-model-badge" role="img" aria-label="Model Y L" hidden></span><span id="car-model-text" hidden></span></span>
-      <span class="batt-pill" id="batt-pill" role="button" tabindex="0" data-level="unknown"
-            title="点击切换 电量 / 续航">
-        <svg class="batt-icon" viewBox="0 0 30 14" aria-hidden="true">
-          <rect class="batt-shell" x="1" y="1.5" width="24" height="11" rx="3.5"/>
-          <rect class="batt-cap" x="26.5" y="4.5" width="2.5" height="5" rx="1.2"/>
-          <rect class="batt-fill" id="batt-fill" x="3" y="4" width="0" height="6" rx="1.6"/>
-        </svg>
-        <span id="batt-text">—</span>
-      </span>
-      <span class="badge" id="state-badge" data-state="unknown">
-        <span class="dot"></span><span id="state-text">加载中…</span>
-      </span>
-      <span class="header-sub-right">
-        <span class="sys-meters" id="sys-stats">
-          <span class="meter" id="meter-disk" data-level="ok" hidden>
-            <span class="meter-label">硬盘</span>
-            <span class="meter-track"><i id="meter-disk-fill"></i></span>
-            <span class="meter-val" id="meter-disk-val">—</span>
-          </span>
-          <span class="meter" id="meter-mem" data-level="ok" hidden>
-            <span class="meter-label">内存</span>
-            <span class="meter-track"><i id="meter-mem-fill"></i></span>
-            <span class="meter-val" id="meter-mem-val">—</span>
-          </span>
+    <div class="header-sys">
+      <span class="sys-meters" id="sys-stats">
+        <span class="meter" id="meter-disk" data-level="ok" hidden>
+          <span class="meter-label">硬盘</span>
+          <span class="meter-track"><i id="meter-disk-fill"></i></span>
+          <span class="meter-val" id="meter-disk-val">—</span>
         </span>
-        <span id="sw-version"></span>
-        <span id="updated-at">加载中…</span>
+        <span class="meter" id="meter-mem" data-level="ok" hidden>
+          <span class="meter-label">内存</span>
+          <span class="meter-track"><i id="meter-mem-fill"></i></span>
+          <span class="meter-val" id="meter-mem-val">—</span>
+        </span>
       </span>
     </div>
   </header>
