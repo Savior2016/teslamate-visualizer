@@ -15,10 +15,18 @@
 ```bash
 cp docker-compose.example.yml docker-compose.yml
 # 编辑 docker-compose.yml,填入数据库密码与面板账号
+cp Caddyfile.example Caddyfile
+# 编辑 Caddyfile,换成你的域名;密码用 bcrypt 哈希:
+#   docker run --rm caddy:2-alpine caddy hash-password --plaintext '你的密码'
 docker compose up -d --build
 ```
 
 需要与 TeslaMate 部署在同一台机器(复用其 `teslamate_default` 网络,通过 `database` 别名访问 PostgreSQL)。
+
+### HTTPS 与认证
+
+- **Caddy 反代**负责自动 HTTPS(Let's Encrypt,需域名解析到服务器且 80/443 放行)和第一层 Basic Auth(密码存 bcrypt 哈希)。
+- **应用内**保留第二道 Basic Auth(明文存于 compose 环境变量,仅本机容器内网可达)。两层使用相同账号密码时,浏览器只弹一次登录框——Caddy 会原样转发 `Authorization` 头。
 
 ### 配置项
 

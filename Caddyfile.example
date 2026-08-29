@@ -1,0 +1,11 @@
+# Caddy 反向代理配置示例:自动 HTTPS + Basic Auth
+# 使用时复制为 Caddyfile 并替换域名与密码哈希:
+#   生成哈希:docker run --rm caddy:2-alpine caddy hash-password --plaintext '你的密码'
+your-domain.example.com {
+    encode zstd gzip
+    basic_auth {
+        # 用户名 bcrypt哈希(不是明文密码)
+        user1 $2a$14$REPLACE_WITH_BCRYPT_HASH
+    }
+    reverse_proxy visualizer:8080
+}

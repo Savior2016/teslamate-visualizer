@@ -6,9 +6,10 @@
 # 用户数据(充电费用等原始数据)
 data/
 
-# 真实部署配置(含密码,仅保留示例文件)
+# 真实部署配置(含密码/哈希,仅保留示例文件)
 docker-compose.yml
 docker-compose.override.yml
+Caddyfile
 
 # Python
 __pycache__/
