@@ -280,14 +280,26 @@
   // 服务器硬盘 / 内存占用(顶栏第二行)
   function renderSys(sys) {
     if (!sys) return;
-    const parts = [];
-    if (sys.disk_pct !== null && sys.disk_pct !== undefined) {
-      parts.push(`硬盘 ${fmtNum(sys.disk_used_gb, 0)}/${fmtNum(sys.disk_total_gb, 0)} GB (${fmtNum(sys.disk_pct, 0)}%)`);
-    }
-    if (sys.mem_pct !== null && sys.mem_pct !== undefined) {
-      parts.push(`内存 ${fmtNum(sys.mem_used_mb / 1024, 1)}/${fmtNum(sys.mem_total_mb / 1024, 1)} GB (${fmtNum(sys.mem_pct, 0)}%)`);
-    }
-    $('#sys-stats').textContent = parts.join(' · ');
+    // 可视化仪表条:填充宽度 = 使用率,数值文字 + 悬停显示用量详情;
+    // ≥75% 转黄,≥90% 转红(与电量胶囊的警示色一致)
+    const setMeter = (id, pct, detail) => {
+      const m = $(id);
+      if (!m) return;
+      if (pct === null || pct === undefined || Number.isNaN(Number(pct))) {
+        m.hidden = true;
+        return;
+      }
+      const v = Number(pct);
+      m.hidden = false;
+      m.title = detail;
+      m.dataset.level = v >= 90 ? 'critical' : (v >= 75 ? 'warn' : 'ok');
+      $(id + '-fill').style.width = `${Math.min(100, Math.max(0, v))}%`;
+      $(id + '-val').textContent = `${fmtNum(v, 0)}%`;
+    };
+    setMeter('#meter-disk', sys.disk_pct,
+      `硬盘 ${fmtNum(sys.disk_used_gb, 0)}/${fmtNum(sys.disk_total_gb, 0)} GB`);
+    setMeter('#meter-mem', sys.mem_pct,
+      `内存 ${fmtNum(sys.mem_used_mb / 1024, 1)}/${fmtNum(sys.mem_total_mb / 1024, 1)} GB`);
   }
 
   // 车型显示名:库中 model 为单字母;车主确认本车(Y / 74D 双电机)为 Model Y L

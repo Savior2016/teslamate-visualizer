@@ -124,6 +124,15 @@ header { margin-bottom: 8px; }
   flex-wrap: wrap;
 }
 
+/* 第一行右侧的车型图片 */
+.header-row .model-icon {
+  margin-left: auto;
+  height: 46px;
+  width: auto;
+  flex: none;
+  display: block;
+}
+
 header h1 {
   font-size: 20px;
   font-weight: 650;
@@ -171,14 +180,13 @@ header h1:active { opacity: 0.55; }
 .batt-pill[data-level="critical"] .batt-fill { fill: #d03b3b; }
 .batt-pill[data-level="unknown"] .batt-fill { fill: var(--text-muted); }
 
-/* 第二行:车型 + 数据更新时间 */
+/* 第二行:车名 / 车型徽章 / 电量 / 状态 / 服务器资源 / 版本 / 更新时间 */
 .header-sub {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 6px 10px;
+  gap: 8px 14px;
   flex-wrap: wrap;
-  margin-top: 6px;
+  margin-top: 2px;
   font-size: 12.5px;
   color: var(--text-muted);
 }
@@ -212,7 +220,39 @@ header h1:active { opacity: 0.55; }
   mask: url('/model-yl-badge.png') center / contain no-repeat;
 }
 
-.model-icon { height: 26px; width: auto; flex: none; display: block; }
+/* 服务器资源:可视化仪表条(与 KPI 卡片 meter 同一视觉语言) */
+.sys-meters { display: inline-flex; align-items: center; gap: 14px; }
+
+.sys-meters .meter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.sys-meters .meter-track {
+  width: 56px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--tile-track);
+  overflow: hidden;
+  display: inline-block;
+}
+
+.sys-meters .meter-track > i {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 3px;
+  background: var(--series-1);
+  transition: width 0.6s ease, background 0.6s ease;
+}
+
+.sys-meters .meter[data-level="warn"] .meter-track > i { background: #fab219; }
+.sys-meters .meter[data-level="critical"] .meter-track > i { background: #d03b3b; }
+.sys-meters .meter-val { font-variant-numeric: tabular-nums; min-width: 3.2ch; }
 
 #sys-stats { font-variant-numeric: tabular-nums; white-space: nowrap; }
 
@@ -815,13 +855,17 @@ footer a { color: var(--text-muted); }
 @media (max-width: 600px) {
   .grid { gap: 10px; }
 
-  /* 顶栏两行:标题行紧凑,第二行(车型 / 更新时间)允许换行 */
+  /* 顶栏:第一行标题+车图,第二行信息允许换行 */
   .header-row { gap: 6px 10px; }
+  .header-row .model-icon { height: 32px; }
   header h1 { font-size: 18px; }
   .car-name { font-size: 16px; }
   .badge { font-size: 12px; padding: 3px 9px; }
   .batt-pill { font-size: 12px; padding: 3px 9px; gap: 6px; }
   .batt-icon { width: 26px; height: 12px; }
+  #car-model-badge { height: 13px; width: 116px; }
+  .sys-meters { gap: 10px; }
+  .sys-meters .meter-track { width: 44px; }
   #sw-version { display: none; }
   .icon-btn { padding: 8px 14px; }
 
