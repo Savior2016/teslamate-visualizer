@@ -1052,6 +1052,63 @@ button { touch-action: manipulation; }
   .cs-tag { font-size: 9px; padding: 0 3px; }
 }
 
+/* ===== 充电桩统计 ===== */
+.cg-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cg-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 9px 14px;
+  background: var(--page);
+}
+
+.cg-head {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.cg-head b { font-size: 14px; font-weight: 600; }
+
+.cg-loc { font-size: 11px; color: var(--text-muted); }
+
+.cg-stats {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.cg-chip {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 9px;
+  white-space: nowrap;
+}
+
+.cg-chip b { color: var(--text-primary); font-weight: 600; }
+
+.cg-loss-low b { color: var(--cat-charge); }
+
+.cg-loss-high b { color: #fab219; }
+
+@media (max-width: 600px) {
+  .cg-item { flex-direction: column; align-items: flex-start; gap: 6px; }
+  .cg-stats { justify-content: flex-start; }
+}
+
 /* ===== 地图轨迹列表 ===== */
 #routes-list { margin-top: 10px; }
 

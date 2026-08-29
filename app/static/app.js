@@ -1322,6 +1322,7 @@
       S.overview.activity = act;
     }
     renderSessions();
+    renderChargers();
     if (withCosts) { renderCosts(); renderEvents(); renderActivity(); }
   }
 
@@ -1490,6 +1491,72 @@
         ? `¥${fmtNum(c.per_km_yuan, 2)} /km` : '—');
 
       item.appendChild(fields);
+      box.appendChild(item);
+    });
+  }
+
+  /* ---------- 渲染:充电桩统计(按桩聚合 sessions 数据) ---------- */
+
+  function renderChargers() {
+    const box = $('#cg-list');
+    if (!box || !S.sessions) return;
+    box.textContent = '';
+    const charges = S.sessions.charges || [];
+    if (!charges.length) {
+      box.appendChild(el('div', 'empty', '所选时间范围内暂无充电记录'));
+      return;
+    }
+
+    // 按地点键分组;无地点信息的会话无法跨次关联,归入「未记录地点」
+    const agg = new Map();
+    charges.forEach((c) => {
+      const key = c.loc_key || 'noloc';
+      const g = agg.get(key) || {
+        name: '', location: '', count: 0,
+        energy: 0, dur: 0, cost: 0, hasCost: false,
+        ePaired: 0, uPaired: 0,  // 仅「充电量与总耗电都有值」的会话参与损耗计算
+      };
+      if (!g.name && c.charger_name) g.name = c.charger_name;
+      if (!g.location && c.charger_location) g.location = c.charger_location;
+      g.count += 1;
+      if (c.energy_kwh !== null && c.energy_kwh !== undefined) g.energy += Number(c.energy_kwh);
+      g.dur += Number(c.duration_min) || 0;
+      if (c.cost !== null && c.cost !== undefined) { g.cost += Number(c.cost); g.hasCost = true; }
+      if (c.energy_kwh != null && c.total_kwh != null && Number(c.total_kwh) > 0) {
+        g.ePaired += Number(c.energy_kwh);
+        g.uPaired += Number(c.total_kwh);
+      }
+      agg.set(key, g);
+    });
+    const rows = [...agg.values()].sort((a, b) => b.energy - a.energy);
+
+    rows.forEach((g) => {
+      const item = el('div', 'cg-item');
+      const head = el('div', 'cg-head');
+      head.appendChild(el('b', '', g.name || g.location || '未命名充电桩'));
+      if (g.name && g.location) head.appendChild(el('span', 'cg-loc', g.location));
+      item.appendChild(head);
+
+      const stats = el('div', 'cg-stats');
+      const chip = (label, value, cls) => {
+        const t = el('span', ('cg-chip ' + (cls || '')).trim());
+        t.appendChild(el('span', '', label + ' '));
+        t.appendChild(el('b', '', value));
+        stats.appendChild(t);
+      };
+      chip('充电', `${g.count} 次`);
+      chip('充电量', `${fmtNum(g.energy, 1)} kWh`);
+      chip('时长', fmtDur(g.dur));
+      if (g.uPaired > 0) {
+        const loss = g.uPaired - g.ePaired;
+        const pct = loss / g.uPaired * 100;
+        const cls = pct >= 10 ? 'cg-loss-high' : (pct < 5 ? 'cg-loss-low' : '');
+        chip('损耗', `${fmtNum(pct, 1)}% (${fmtNum(loss, 1)} kWh)`, cls);
+      } else {
+        chip('损耗', '—');
+      }
+      if (g.hasCost) chip('费用', `¥${fmtNum(g.cost, 2)}`);
+      item.appendChild(stats);
       box.appendChild(item);
     });
   }
@@ -1842,6 +1909,7 @@
       renderHeader();
       renderCar();
       renderSessions();
+      renderChargers();
       renderKpis();
       renderTrends();
       renderDaily();
@@ -1868,7 +1936,7 @@
     renderDaily(); renderCharging(); renderTable();
     renderRoutes(); renderRoutesList(); renderCosts();
     renderActivity(); renderEvents(); renderSentry();
-    renderEfficiency(); renderTpms(); renderCar(); renderSessions();
+    renderEfficiency(); renderTpms(); renderCar(); renderSessions(); renderChargers();
   }
 
   /* ---------- 初始化 ---------- */
