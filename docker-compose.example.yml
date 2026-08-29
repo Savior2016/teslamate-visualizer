@@ -1,0 +1,26 @@
+services:
+  visualizer:
+    build: .
+    image: teslamate-visualizer:latest
+    container_name: teslamate-visualizer
+    restart: always
+    environment:
+      - DATABASE_HOST=database
+      - DATABASE_PORT=5432
+      - DATABASE_USER=teslamate
+      - DATABASE_PASS=CHANGE_ME_DB_PASSWORD
+      - DATABASE_NAME=teslamate
+      - DISPLAY_TZ=Asia/Shanghai
+      # HTTP Basic Auth:浏览器访问面板时要求输入账号密码,支持多账号(user:pass 逗号分隔)
+      - VISUALIZER_USERS=user1:CHANGE_ME,user2:CHANGE_ME
+    ports:
+      - "8080:8080"
+    volumes:
+      # 用户录入的充电费用持久化(charge_costs.json)
+      - ./data:/data
+
+# 复用 TeslaMate 项目的网络,直接通过 database 别名访问其 PostgreSQL
+networks:
+  default:
+    name: teslamate_default
+    external: true

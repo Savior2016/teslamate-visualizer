@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0d0d0d">
+  <title>TESLA Home</title>
+  <link rel="stylesheet" href="/leaflet.css">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>TESLA Home</h1>
+    <span class="car-name" id="car-name">—</span>
+    <span class="car-model" id="car-model"></span>
+    <span class="badge" id="state-badge" data-state="unknown">
+      <span class="dot"></span><span id="state-text">加载中…</span>
+    </span>
+    <div class="header-right">
+      <span id="sw-version"></span>
+      <span id="updated-at">加载中…</span>
+      <button class="icon-btn" id="refresh-btn" title="立即刷新">刷新</button>
+      <button class="icon-btn" id="theme-btn" title="切换主题">☀ 浅色</button>
+    </div>
+  </header>
+
+  <div class="filter-row">
+    <div class="seg" id="range-seg" role="group" aria-label="时间范围">
+      <button data-days="1">24 小时</button>
+      <button data-days="7" class="on">7 天</button>
+      <button data-days="30">30 天</button>
+    </div>
+    <span class="hint">数据源:TeslaMate · 每 60 秒自动刷新</span>
+  </div>
+
+  <div class="grid">
+    <div class="card col-12">
+      <div class="card-head">
+        <div>
+          <h2>电量活动时间线</h2>
+          <div class="card-sub">电量曲线与每日分隔,下方双泳道标注行程 / 充电 / 哨兵 / 驻车耗电 · 手机可拖动缩放</div>
+        </div>
+        <div class="card-head-right">
+          <div class="chip-legend" id="activity-legend">
+            <span class="chip cat-drive">行驶</span>
+            <span class="chip cat-charge">充电</span>
+            <span class="chip cat-sentry">哨兵</span>
+            <span class="chip cat-idle">驻车耗电</span>
+          </div>
+          <div class="seg mini batt-toggle" role="group" aria-label="电量/里程切换">
+            <button data-mode="pct" class="on">电量 %</button>
+            <button data-mode="km">里程 km</button>
+          </div>
+        </div>
+      </div>
+      <div class="chart chart-activity" id="chart-activity"></div>
+    </div>
+
+    <div class="card col-12">
+      <div class="card-head">
+        <div>
+          <h2>活动事件</h2>
+          <div class="card-sub">按时间顺序展示行程 / 充电 / 哨兵 / 驻车耗电,点击日期可折叠</div>
+        </div>
+        <button class="icon-btn" id="events-toggle-btn">全部收起</button>
+      </div>
+      <div id="events-list"></div>
+    </div>
+
+    <div class="card col-12">
+      <div class="card-head">
+        <div>
+          <h2>哨兵时间轴与耗电曲线</h2>
+          <div class="card-sub">哨兵时段为按「驻车保持清醒 + 电量下降」推断(车辆不直接上报哨兵状态)</div>
+        </div>
+        <div class="mini-stats" id="sentry-stats"></div>
+      </div>
+      <div class="sentry-split">
+        <div class="sentry-pane">
+          <h3>每天哨兵开启时间轴</h3>
+          <div class="chart" id="chart-sentry-lanes"></div>
+        </div>
+        <div class="sentry-pane">
+          <div class="pane-head">
+            <h3>哨兵耗电曲线</h3>
+            <div class="seg mini batt-toggle" role="group" aria-label="电量/里程切换">
+              <button data-mode="pct" class="on">电量 %</button>
+              <button data-mode="km">里程 km</button>
+            </div>
+          </div>
+          <div class="chart" id="chart-sentry-drain"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card col-6">
+      <h2>平均能耗变化</h2>
+      <div class="card-sub">每次行程 Wh/km(点)+ 滑动平均(线),按理想续航差值 × 校准系数估算</div>
+      <div class="chart" id="chart-efficiency"></div>
+    </div>
+
+    <div class="card col-6">
+      <h2>胎压变化</h2>
+      <div class="card-sub">四轮胎压(bar),仅车辆清醒时段上报</div>
+      <div class="chart" id="chart-tpms"></div>
+    </div>
+  </div>
+
+  <section class="kpis" id="kpis"></section>
+
+  <div class="grid">
+    <div class="card col-6">
+      <div class="card-head">
+        <div>
+          <h2>电量趋势</h2>
+          <div class="card-sub">仪表电量,按时间降采样;里程为按满电额定续航线性折算</div>
+        </div>
+        <div class="seg mini batt-toggle" role="group" aria-label="电量/里程切换">
+          <button data-mode="pct" class="on">电量 %</button>
+          <button data-mode="km">里程 km</button>
+        </div>
+      </div>
+      <div class="chart" id="chart-battery"></div>
+    </div>
+    <div class="card col-6">
+      <h2>续航趋势</h2>
+      <div class="card-sub">额定续航(km),仅车辆清醒时段上报</div>
+      <div class="chart" id="chart-range"></div>
+    </div>
+
+    <div class="card col-6">
+      <h2>每日行驶里程</h2>
+      <div class="card-sub">按出发日统计</div>
+      <div class="chart" id="chart-daily"></div>
+    </div>
+    <div class="card col-6">
+      <h2>充电记录</h2>
+      <div class="card-sub">每次充电补充的电量</div>
+      <div class="chart" id="chart-charging"></div>
+    </div>
+
+    <div class="card col-12">
+      <div class="card-head">
+        <div>
+          <h2>充电费用</h2>
+          <div class="card-sub">填写每次充电费用后,自动计算充电单价(¥/kWh)、每次行程与停放(哨兵/驻车)耗电的金额、充电后每公里金额</div>
+        </div>
+        <div class="mini-stats" id="cost-stats"></div>
+      </div>
+      <div class="table-scroll">
+        <table id="costs-table"></table>
+      </div>
+    </div>
+
+    <div class="card col-12">
+      <h2>最近行程</h2>
+      <div class="card-sub">能耗为估算值:按理想续航差值 × 充电校准系数</div>
+      <div class="table-scroll">
+        <table id="drives-table"></table>
+      </div>
+    </div>
+
+    <div class="card col-12">
+      <div class="card-head">
+        <div>
+          <h2>行程轨迹</h2>
+          <div class="card-sub" id="routes-title">—</div>
+        </div>
+        <button class="icon-btn" id="routes-toggle-btn">全部收起</button>
+      </div>
+      <div id="map"></div>
+      <div class="map-legend" id="map-legend">
+        <span class="swatch"><i style="background:var(--series-1)"></i>行程轨迹</span>
+        <span class="swatch"><i style="background:var(--series-2)"></i>最近一次行程</span>
+        <span class="swatch"><i style="background:var(--seq-blue-500)"></i>选中行程</span>
+      </div>
+      <div id="routes-list"></div>
+    </div>
+  </div>
+
+  <footer>
+    本面板直接读取 TeslaMate 的 PostgreSQL 数据库(只读查询)。
+    时间均为 Asia/Shanghai;能耗按「理想续航差值 × 每理想续航公里电量(由充电历史校准)」估算。
+  </footer>
+</div>
+
+<script src="/echarts.min.js"></script>
+<script src="/leaflet.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>

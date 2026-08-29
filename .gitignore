@@ -1,0 +1,22 @@
+# 环境变量与密钥
+.env
+.env.*
+*.env
+
+# 用户数据(充电费用等原始数据)
+data/
+
+# 真实部署配置(含密码,仅保留示例文件)
+docker-compose.yml
+docker-compose.override.yml
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# 系统/编辑器
+.DS_Store
+*.swp
+.vscode/
+.idea/
