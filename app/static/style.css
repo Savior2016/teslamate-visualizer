@@ -191,8 +191,8 @@ header h1:active { opacity: 0.55; }
   color: var(--text-secondary);
 }
 
-/* 车型字样:与 tesla.cn 官网一致(Universal Sans Display, 500);
-   Model Y L 用文字图标 SVG(官方字体转曲,fill=currentColor 随主题变色) */
+/* 车型字样:Model Y L 用官方尾标徽章(官图提取的 PNG 蒙版,
+   background: currentColor 随主题变色);其他车型回退为 Universal Sans 文字 */
 #car-model {
   font-family: 'Universal Sans Display', system-ui, sans-serif;
   font-weight: 500;
@@ -203,7 +203,14 @@ header h1:active { opacity: 0.55; }
   align-items: center;
 }
 
-#car-model-mark { height: 16px; width: auto; display: block; }
+#car-model-badge {
+  display: block;
+  height: 15px;
+  width: 134px; /* 徽章比例 926:104 */
+  background: currentColor;
+  -webkit-mask: url('/model-yl-badge.png') center / contain no-repeat;
+  mask: url('/model-yl-badge.png') center / contain no-repeat;
+}
 
 .model-icon { height: 26px; width: auto; flex: none; display: block; }
 

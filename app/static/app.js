@@ -302,9 +302,9 @@
     const trimKey = car ? `${car.model}|${car.trim_badging || ''}` : '';
     const modelLabel = TRIM_LABEL[trimKey] ||
       (car ? (MODEL_LABEL[car.model] || car.model || '') : '');
-    // Model Y L 展示官方字体生成的文字图标(SVG,随主题变色);其他车型回退为文字
+    // Model Y L 展示官方尾标徽章(PNG 蒙版 + currentColor 随主题变色);其他车型回退为文字
     const isYL = modelLabel === 'Model Y L';
-    $('#car-model-mark').hidden = !isYL;
+    $('#car-model-badge').hidden = !isYL;
     const modelText = $('#car-model-text');
     modelText.hidden = isYL;
     if (!isYL) modelText.textContent = modelLabel;
