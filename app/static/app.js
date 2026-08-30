@@ -1090,16 +1090,14 @@
     return { v: pct, unit: '%', dec: 0 };
   }
 
-  // 玻璃顶坐标系:viewBox 0 0 340 460,玻璃顶前缘(y=162)=100% 满电端,后缘(y=384)=0%
-  const CARY = (p) => 384 - 2.22 * p;
-  const GLASS_TOP = 162;
+  // 玻璃顶能量环:pathLength=100,各段用 dasharray/offset 沿环分布(顶点=起点,顺时针)
 
-  // 分段点选:车身分带 ⇄ 图例详情 联动高亮(再点一次或点空白处取消)
+  // 分段点选:能量环 ⇄ 图例详情 联动高亮(再点一次或点空白处取消)
   let carSel = null;
   function setCarSel(k) {
     carSel = k || null;
-    document.querySelectorAll('.car-svg rect[id^="carfill-"]').forEach((r) => {
-      r.classList.toggle('dim', !!carSel && r.id !== `carfill-${carSel}`);
+    document.querySelectorAll('.car-svg .carring').forEach((r) => {
+      r.classList.toggle('dim', !!carSel && r.id !== `carring-${carSel}`);
     });
     document.querySelectorAll('.cl-item[data-k]').forEach((d) =>
       d.classList.toggle('on', !!carSel && d.dataset.k === carSel));
@@ -1143,20 +1141,29 @@
     strip.querySelectorAll('.cyc-chip').forEach((b) =>
       b.classList.toggle('on', Number(b.dataset.idx) === S.cycleIdx));
 
-    const SEG_IDS = ['#carfill-uncharged', '#carfill-idle', '#carfill-climate',
-      '#carfill-sentry', '#carfill-drive', '#carfill-remaining'];
-    const SEP_IDS = ['#carsep-1', '#carsep-2', '#carsep-3', '#carsep-4', '#carsep-5'];
+    /* --- 能量占比环:围绕玻璃顶一圈(自顶点顺时针),pathLength=100 归一化 --- */
+    const RING_KEYS = ['uncharged', 'idle', 'climate', 'sentry', 'drive', 'remaining'];
+    const GAP = 0.8;  // 段间缝隙(占环长 %)
+    const setRing = (k, start, len) => {
+      const p = $(`#carring-${k}`);
+      if (!p) return;
+      if (len <= GAP) {
+        p.setAttribute('stroke-dasharray', '0 100');
+        return;
+      }
+      p.setAttribute('stroke-dasharray',
+        `${(len - GAP).toFixed(2)} ${(100 - len + GAP).toFixed(2)}`);
+      p.setAttribute('stroke-dashoffset', (-(start + GAP / 2)).toFixed(2));
+    };
     if (!cyc) {
-      SEG_IDS.forEach((id) => {
-        const r = $(id);
-        if (r) { r.setAttribute('y', GLASS_TOP); r.setAttribute('height', 0); }
+      RING_KEYS.forEach((k) => {
+        const p = $(`#carring-${k}`);
+        if (p) p.setAttribute('stroke-dasharray', '0 100');
       });
-      SEP_IDS.forEach((id) => {
-        const l = $(id);
-        if (l) { l.setAttribute('y1', GLASS_TOP); l.setAttribute('y2', GLASS_TOP); }
-      });
+      $('#car-center-value').textContent = '—';
+      $('#car-center-label').textContent = '暂无充电周期';
     } else {
-      // 车头侧斜纹 = 本次未充(100% − 充至电量);充入区各段按估算值归一化填满
+      // 顶点起第一段斜纹 = 本次未充(100% − 充至电量);充入区各段按估算值归一化填满
       const inner = [
         ['uncharged', Number(cyc.uncharged_pct), true],
         ['idle', Number(cyc.idle_pct), false],
@@ -1168,36 +1175,29 @@
       const normSum = inner.slice(1).reduce((s, x) => s + x[1], 0);
       const scale = normSum > 0 ? cyc.level_after / normSum : 0;
       let cum = 100;
-      const boundsY = [];
-      inner.forEach(([k, v, raw], i) => {
+      inner.forEach(([k, v, raw]) => {
         const frac = raw ? v : v * scale;
-        const y1 = CARY(cum);
+        setRing(k, 100 - cum, frac);
         cum -= frac;
-        const y2 = CARY(cum);
-        const r = $(`#carfill-${k}`);
-        r.setAttribute('y', y1.toFixed(1));
-        r.setAttribute('height', Math.max(0, y2 - y1).toFixed(1));
-        if (i < inner.length - 1) boundsY.push(y2);
       });
-      SEP_IDS.forEach((id, i) => {
-        const l = $(id);
-        if (!l) return;
-        l.setAttribute('y1', boundsY[i].toFixed(1));
-        l.setAttribute('y2', boundsY[i].toFixed(1));
-      });
+      // 玻璃顶中央读数 = 剩余(跟随 电量/度数/里程 切换)
+      const rc = carConvPct(Number(cyc.remaining_pct), cyc.cap_kwh || 84);
+      $('#car-center-value').textContent =
+        rc.v === null ? '—' : `${fmtNum(rc.v, rc.dec)} ${rc.unit}`;
+      $('#car-center-label').textContent = cyc.active ? '当前剩余' : '周期末剩余';
     }
 
-    /* --- 左列:里程统计(额定续航 / 总里程 / 本月里程 / 本周里程,仅展示) --- */
+    /* --- 左列:里程统计(额定续航 / 本月里程 / 本周里程,仅展示) --- */
     const lat = o.latest || null;
     const t = o.totals || {};
     const rated = lat && lat.rated_battery_range_km != null ? Number(lat.rated_battery_range_km) : null;
     const odo = lat && lat.odometer != null ? Number(lat.odometer) : null;
     const usable = lat && lat.usable_battery_level != null ? Number(lat.usable_battery_level) : null;
+    const fullKm = kmFull();
     const statCol = $('#car-legend-l');
     statCol.textContent = '';
     [
-      { name: '额定续航', v: rated, sub: usable === null ? '' : `当前电量 ${fmtNum(usable, 0)}%` },
-      { name: '总里程', v: odo, sub: '' },
+      { name: '额定续航', v: rated, sub: fullKm === null ? '' : `满电约 ${fmtNum(fullKm, 0)} km` },
       { name: '本月里程', v: t.month_km != null ? Number(t.month_km) : null, sub: '' },
       { name: '本周里程', v: t.week_km != null ? Number(t.week_km) : null, sub: '' },
     ].forEach((s) => {
@@ -1209,6 +1209,56 @@
       d.appendChild(tx);
       statCol.appendChild(d);
     });
+
+    /* --- 车身读数:车头总里程 / 前风挡当前电量填充 / 后风挡车内温度 --- */
+    $('#car-odo').textContent = odo === null ? '—' : `${fmtNum(odo, 0)} km`;
+    const wr = $('#carfill-batt');
+    if (wr) {
+      const WH = 42;  // 前风挡高度(y 104..146),自下而上填充
+      const h = usable === null ? 0 : Math.max(0, Math.min(100, usable)) / 100 * WH;
+      wr.setAttribute('y', (146 - h).toFixed(1));
+      wr.setAttribute('height', h.toFixed(1));
+    }
+    $('#car-batt-val').textContent = usable === null ? '—' : `${fmtNum(usable, 0)}%`;
+    const inT = lat && lat.inside_temp != null ? Number(lat.inside_temp) : null;
+    $('#car-temp-val').textContent = inT === null ? '—' : `${fmtNum(inT, 1)}°`;
+    const itv = $('#intemp-val');
+    if (itv) itv.textContent = inT === null ? '—' : fmtNum(inT, 1);
+
+    // 车内温度迷你曲线(车尾下方面板)
+    const tch = charts.intemp;
+    if (tch) {
+      const idata = ((o.temp && o.temp.inside) || []).map((p) => [Number(p[0]), Number(p[1])]);
+      const color = cssVar('--series-2');
+      tch.setOption(Object.assign({}, chartTheme(), {
+        animation: false,
+        tooltip: {
+          trigger: 'axis',
+          backgroundColor: cssVar('--surface-1'),
+          borderColor: cssVar('--border'), borderWidth: 1, padding: [5, 9],
+          textStyle: { color: cssVar('--text-primary'), fontSize: 11 },
+          extraCssText: 'box-shadow: 0 4px 16px rgba(0,0,0,.18);border-radius:8px;',
+          formatter(params) {
+            const p = params[0];
+            return `<div style="color:${cssVar('--text-muted')};font-size:10px">${fmtTime(p.value[0], true)}</div>` +
+                   `<b>${fmtNum(p.value[1], 1)} °C</b>`;
+          },
+        },
+        grid: { left: 2, right: 2, top: 3, bottom: 2 },
+        xAxis: { type: 'time', show: false },
+        yAxis: { type: 'value', show: false, scale: true },
+        series: [{
+          type: 'line', data: idata, smooth: 0.4, showSymbol: false,
+          lineStyle: { width: 1.6, color },
+          areaStyle: {
+            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+              { offset: 0, color: color + '59' },
+              { offset: 1, color: color + '0a' },
+            ]),
+          },
+        }],
+      }), { notMerge: true });
+    }
 
     /* --- 右列:全部电耗分段(未充/驻车耗电/驻车空调/哨兵/行驶/剩余,与车身分带点选联动) --- */
     const cap = cyc && cyc.cap_kwh ? Number(cyc.cap_kwh) : 84;
@@ -2125,6 +2175,7 @@
     charts.wfr = echarts.init($('#chart-wfr'));
     charts.wrl = echarts.init($('#chart-wrl'));
     charts.wrr = echarts.init($('#chart-wrr'));
+    charts.intemp = echarts.init($('#chart-intemp'));
 
     // 车辆总览:电量 % / 度数 kWh / 里程 km 三态切换(本卡片独立,持久化)
     const carSeg = $('#car-mode-seg');
@@ -2149,11 +2200,11 @@
       b.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
     });
 
-    // 俯视图分段 ⇄ 图例:点击互相定位高亮
+    // 俯视图能量环 ⇄ 图例:点击互相定位高亮
     $('.car-svg').addEventListener('click', (e) => {
-      const r = e.target.closest('rect[id^="carfill-"]');
+      const r = e.target.closest('.carring');
       if (!r) { setCarSel(null); return; }
-      const k = r.id.replace('carfill-', '');
+      const k = r.id.replace('carring-', '');
       setCarSel(carSel === k ? null : k);
     });
     document.querySelectorAll('.car-legend').forEach((box) =>

@@ -325,10 +325,18 @@ button { touch-action: manipulation; }
   align-items: stretch;
 }
 
-/* 中央:俯视图舞台(车头朝上),四轮面板在四角 */
+/* 中央列:俯视图舞台(车头朝上)+ 车内温度迷你面板 */
+.car-mid {
+  flex: 1 1 300px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .car-stage {
   position: relative;
-  flex: 1 1 300px;
+  flex: 1 1 auto;
   min-width: 0;
   height: 560px;
 }
@@ -339,6 +347,18 @@ button { touch-action: manipulation; }
   width: 100%;
   height: 100%;
 }
+
+/* 车内温度迷你面板(车尾下方,配温度曲线) */
+.temp-mini {
+  width: min(280px, 100%);
+  margin: 0 auto;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 7px 10px 5px;
+}
+
+.temp-mini .wheel-chart { height: 46px; }
 
 .car-body-base { fill: var(--tile-track); }
 
@@ -357,7 +377,7 @@ button { touch-action: manipulation; }
 /* 车头微光:白色低透明度罩层,两种主题下都只是一点光泽 */
 .car-sheen { fill: #fff; opacity: 0.05; }
 
-/* 机盖 / 尾门缝线 */
+/* 机盖缝线 */
 .car-seam {
   fill: none;
   stroke: var(--baseline);
@@ -365,58 +385,40 @@ button { touch-action: manipulation; }
   opacity: 0.35;
 }
 
-/* 能量占比分带:车头(上)为满电端,纯色填充不带阴影 */
-.carfill-remaining { fill: var(--series-1); }
-.carfill-drive { fill: var(--cat-drive); }
-.carfill-sentry { fill: var(--cat-sentry); }
-.carfill-climate { fill: var(--series-4); }
-.carfill-idle { fill: var(--cat-idle); }
-
-.carfill-remaining, .carfill-drive, .carfill-sentry, .carfill-climate, .carfill-idle, #carfill-uncharged {
-  transition: y 0.6s ease, height 0.6s ease, opacity 0.25s ease;
+/* 前风挡:当前电量自下而上填充 */
+.car-ws-fill {
+  fill: var(--series-1);
+  opacity: 0.85;
+  transition: y 0.6s ease, height 0.6s ease;
 }
 
-/* 分段点选联动:未选中的分带压暗 */
-.car-svg rect[id^="carfill-"] { cursor: pointer; }
-.car-svg rect.dim { opacity: 0.22; }
+/* 能量占比环:围绕玻璃顶一圈,各段用 dasharray 沿环分布 */
+.carring {
+  fill: none;
+  stroke-width: 13;
+  cursor: pointer;
+  transition: stroke-dasharray 0.6s ease, stroke-dashoffset 0.6s ease, opacity 0.25s ease;
+}
+
+.carring-remaining { stroke: var(--series-1); }
+.carring-drive { stroke: var(--cat-drive); }
+.carring-sentry { stroke: var(--cat-sentry); }
+.carring-climate { stroke: var(--series-4); }
+.carring-idle { stroke: var(--cat-idle); }
+
+/* 分段点选联动:未选中的环段压暗 */
+.car-svg .carring.dim { opacity: 0.22; }
 
 /* 未充部分:斜纹(pattern 内元素用类以便随主题变色) */
 .hatch-bg { fill: var(--surface-1); }
 .hatch-line { stroke: var(--baseline); stroke-width: 1.6; opacity: 0.85; }
 
-/* 分段分隔线:用页面底色,视觉上把各段切开 */
-.carsep {
-  stroke: var(--surface-1);
-  stroke-width: 2;
-  transition: y1 0.6s ease, y2 0.6s ease;
-}
-
-/* 充电上限线(未充区与充入区的分界) */
-.carsep-limit {
-  stroke: var(--text-muted);
-  stroke-width: 1.4;
-  stroke-dasharray: 6 4;
-}
-
-/* HUD 角标 / 电量刻度 / 轮胎 / 车身描边 */
+/* HUD 角标 / 轮胎 / 车身描边 */
 .car-hud {
   fill: none;
   stroke: var(--baseline);
   stroke-width: 1.5;
   opacity: 0.75;
-}
-
-.car-gauge {
-  fill: none;
-  stroke: var(--text-muted);
-  stroke-width: 1.2;
-  opacity: 0.8;
-}
-
-.car-gauge-label {
-  fill: var(--text-muted);
-  font-size: 9px;
-  opacity: 0.95;
 }
 
 .car-tire { fill: var(--baseline); opacity: 0.85; }
@@ -426,6 +428,47 @@ button { touch-action: manipulation; }
   stroke: var(--baseline);
   stroke-width: 2;
   stroke-linejoin: round;
+}
+
+/* 车身上的读数文字(居中、等宽数字) */
+.car-svg text { text-anchor: middle; font-variant-numeric: tabular-nums; }
+
+.car-odo-label { fill: var(--text-muted); font-size: 9px; }
+.car-odo-val { fill: var(--text-primary); font-size: 15px; font-weight: 650; }
+
+/* 深色玻璃上的文字固定浅色 */
+.car-batt-val { fill: #fff; font-size: 14px; font-weight: 650; }
+.car-temp-val { fill: var(--series-2); font-size: 11px; font-weight: 600; }
+.car-center-val { fill: #f5f5f3; font-size: 30px; font-weight: 700; }
+.car-center-lab { fill: rgba(255, 255, 255, 0.55); font-size: 10px; }
+
+/* 电池健康并入车辆总览:细分隔线 + 上下排列 */
+.car-bh {
+  margin-top: 14px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.car-bh-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.car-bh-head h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.car-bh-sub {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-top: 2px;
 }
 
 /* 两侧图例:左列里程统计(不可点选),右列全部电耗分段 */
@@ -567,10 +610,10 @@ button { touch-action: manipulation; }
 }
 
 /* 车头朝上:前轮毂在上、后轮毂在下;水平位置贴着车身(以中心线偏移) */
-.wheel-fl { left: max(6px, calc(50% - 240px)); top: 118px; }
-.wheel-fr { right: max(6px, calc(50% - 240px)); top: 118px; }
-.wheel-rl { left: max(6px, calc(50% - 240px)); bottom: 92px; }
-.wheel-rr { right: max(6px, calc(50% - 240px)); bottom: 92px; }
+.wheel-fl { left: max(6px, calc(50% - 262px)); top: 118px; }
+.wheel-fr { right: max(6px, calc(50% - 262px)); top: 118px; }
+.wheel-rl { left: max(6px, calc(50% - 262px)); bottom: 92px; }
+.wheel-rr { right: max(6px, calc(50% - 262px)); bottom: 92px; }
 
 .wheel-head {
   display: flex;
@@ -594,7 +637,7 @@ button { touch-action: manipulation; }
 .wheel-chart { width: 100%; height: 44px; }
 
 /* 电池健康(独立模块) */
-.chart-health { height: 240px; }
+.chart-health { height: 150px; }
 
 /* ===== 过滤器行 ===== */
 .filter-row {
@@ -1372,10 +1415,11 @@ footer a { color: var(--text-muted); }
   .chart-activity { height: 320px; }
   .sentry-split { grid-template-columns: 1fr; }
   /* 车辆总览:窄屏舞台独占一行在上,左右图例并排落在下方 */
-  .car-stage { order: -1; flex: 1 1 100%; height: 480px; }
+  .car-mid { order: -1; flex: 1 1 100%; }
+  .car-stage { height: 480px; }
   .car-legend { flex: 1 1 40%; }
-  .wheel-fl, .wheel-rl { left: max(4px, calc(50% - 200px)); }
-  .wheel-fr, .wheel-rr { right: max(4px, calc(50% - 200px)); }
+  .wheel-fl, .wheel-rl { left: max(4px, calc(50% - 222px)); }
+  .wheel-fr, .wheel-rr { right: max(4px, calc(50% - 222px)); }
   .wheel-fl, .wheel-fr { top: 102px; }
   .wheel-rl, .wheel-rr { bottom: 80px; }
   .ev-row {
@@ -1457,7 +1501,7 @@ footer a { color: var(--text-muted); }
   .wheel-chart { height: 36px; }
   .cl-item { padding: 7px 9px; }
   .cl-val { font-size: 15px; }
-  .chart-health { height: 180px; }
+  .chart-health { height: 130px; }
 
   /* 事件列表:日期行允许换行,摘要芯片独占一行防溢出 */
   .day-head { flex-wrap: wrap; padding: 9px 10px; }

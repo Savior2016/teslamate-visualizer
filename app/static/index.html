@@ -80,100 +80,113 @@
       <div class="cycle-strip" id="cycle-strip" hidden></div>
       <div class="carview">
         <div class="car-legend car-legend-l" id="car-legend-l"></div>
-        <div class="car-stage">
-          <svg class="car-svg" viewBox="0 0 340 460" role="img" aria-label="Model Y 俯视图能耗分布">
-            <defs>
-              <!-- 全景玻璃顶:能量分带的显示区域 -->
-              <clipPath id="car-glass-clip">
-                <path d="M170 162 C210 162 238 168 242 190 C244 230 244 300 240 342 C238 370 208 384 170 384 C132 384 102 370 100 342 C96 300 96 230 98 190 C102 168 130 162 170 162 Z"/>
-              </clipPath>
-              <pattern id="car-hatch" width="7" height="7" patternUnits="userSpaceOnUse"
-                       patternTransform="rotate(45)">
-                <rect class="hatch-bg" width="7" height="7"/>
-                <line class="hatch-line" x1="0" y1="0" x2="0" y2="7"/>
-              </pattern>
-              <linearGradient id="car-glass-shine" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0" stop-color="#fff" stop-opacity="0.10"/>
-                <stop offset="0.45" stop-color="#fff" stop-opacity="0"/>
-              </linearGradient>
-            </defs>
-            <!-- HUD 角标 -->
-            <path class="car-hud" d="M26 8 L8 8 L8 26 M8 434 L8 452 L26 452
-                                     M314 452 L332 452 L332 434 M332 26 L332 8 L314 8"/>
-            <!-- 轮胎(车身下层,四角探出的深色圆角块;车头朝上) -->
-            <rect class="car-tire" x="66" y="108" width="16" height="60" rx="8"/>
-            <rect class="car-tire" x="258" y="108" width="16" height="60" rx="8"/>
-            <rect class="car-tire" x="66" y="316" width="16" height="62" rx="8"/>
-            <rect class="car-tire" x="258" y="316" width="16" height="62" rx="8"/>
-            <!-- 车身底色(Model Y 圆润轮廓:楔形车头 + 翼子板外鼓 + 收窄车尾) -->
-            <path class="car-body-base" d="M170 32 C198 32 222 44 236 72 C247 94 254 116 258 142 C262 168 264 190 262 210 C261 228 260 244 260 258 C260 288 262 316 262 334 C261 356 256 378 246 392 C234 408 206 418 170 418 C134 418 106 408 94 392 C84 378 79 356 78 334 C78 316 80 288 80 258 C80 244 79 228 78 210 C76 190 78 168 82 142 C86 116 93 94 104 72 C118 44 142 32 170 32 Z"/>
-            <!-- 车头微光(立体感) -->
-            <path class="car-sheen" d="M170 32 C200 32 226 44 240 74 C247 89 252 102 256 120 C220 100 120 100 84 120 C88 102 93 89 100 74 C114 44 140 32 170 32 Z"/>
-            <!-- 后视镜(A 柱两侧小凸起) -->
-            <path class="car-mirror" d="M79 148 L65 151 C60 152 60 160 65 161 L79 163 Z M261 148 L275 151 C280 152 280 160 275 161 L261 163 Z"/>
-            <!-- 机盖缝线 -->
-            <path class="car-seam" d="M104 92 C136 80 204 80 236 92"/>
-            <!-- 后挡风玻璃(车尾深色小月牙) -->
-            <path class="car-glazing" d="M170 384 C200 384 218 390 224 398 C214 407 194 412 170 412 C146 412 126 407 116 398 C122 390 140 384 170 384 Z"/>
-            <!-- 挡风玻璃 -->
-            <path class="car-glazing" d="M170 110 C128 110 102 127 97 158 L243 158 C238 127 212 110 170 110 Z"/>
-            <!-- 玻璃顶底色(空槽,深色) -->
-            <path class="car-glass-base" d="M170 162 C210 162 238 168 242 190 C244 230 244 300 240 342 C238 370 208 384 170 384 C132 384 102 370 100 342 C96 300 96 230 98 190 C102 168 130 162 170 162 Z"/>
-            <!-- 能量占比分带(裁剪进玻璃顶;自上而下:未充 / 驻车耗电 / 驻车空调 / 哨兵 / 行驶 / 剩余) -->
-            <g clip-path="url(#car-glass-clip)">
-              <rect id="carfill-uncharged" x="0" y="162" width="340" height="0" fill="url(#car-hatch)"/>
-              <rect id="carfill-idle" class="carfill-idle" x="0" y="162" width="340" height="0"/>
-              <rect id="carfill-climate" class="carfill-climate" x="0" y="162" width="340" height="0"/>
-              <rect id="carfill-sentry" class="carfill-sentry" x="0" y="162" width="340" height="0"/>
-              <rect id="carfill-drive" class="carfill-drive" x="0" y="162" width="340" height="0"/>
-              <rect id="carfill-remaining" class="carfill-remaining" x="0" y="162" width="340" height="0"/>
-              <line id="carsep-1" class="carsep carsep-limit" x1="0" x2="340" y1="162" y2="162"/>
-              <line id="carsep-2" class="carsep" x1="0" x2="340" y1="162" y2="162"/>
-              <line id="carsep-3" class="carsep" x1="0" x2="340" y1="162" y2="162"/>
-              <line id="carsep-4" class="carsep" x1="0" x2="340" y1="162" y2="162"/>
-              <line id="carsep-5" class="carsep" x1="0" x2="340" y1="162" y2="162"/>
-              <rect x="90" y="150" width="160" height="250" fill="url(#car-glass-shine)" pointer-events="none"/>
-            </g>
-            <!-- 玻璃顶描边 -->
-            <path class="car-glass-line" d="M170 162 C210 162 238 168 242 190 C244 230 244 300 240 342 C238 370 208 384 170 384 C132 384 102 370 100 342 C96 300 96 230 98 190 C102 168 130 162 170 162 Z"/>
-            <!-- 电量刻度(75 / 50 / 25%,玻璃顶内右缘,避开四轮面板) -->
-            <path class="car-gauge" d="M228 217.5 L240 217.5 M228 273 L240 273 M228 328.5 L240 328.5"/>
-            <text class="car-gauge-label" x="223" y="220.5" text-anchor="end">75</text>
-            <text class="car-gauge-label" x="223" y="276" text-anchor="end">50</text>
-            <text class="car-gauge-label" x="223" y="331.5" text-anchor="end">25</text>
-            <!-- 车身描边(顶层) -->
-            <path class="car-body-line" d="M170 32 C198 32 222 44 236 72 C247 94 254 116 258 142 C262 168 264 190 262 210 C261 228 260 244 260 258 C260 288 262 316 262 334 C261 356 256 378 246 392 C234 408 206 418 170 418 C134 418 106 408 94 392 C84 378 79 356 78 334 C78 316 80 288 80 258 C80 244 79 228 78 210 C76 190 78 168 82 142 C86 116 93 94 104 72 C118 44 142 32 170 32 Z"/>
-          </svg>
-          <div class="wheel wheel-fl">
-            <div class="wheel-head"><span>左前</span><b id="tpms-val-fl">—</b><span class="wheel-unit">bar</span></div>
-            <div class="wheel-chart" id="chart-wfl"></div>
+        <div class="car-mid">
+          <div class="car-stage">
+            <svg class="car-svg" viewBox="0 0 340 460" role="img" aria-label="Model Y 俯视图:玻璃顶环形能耗分布">
+              <defs>
+                <!-- 前风挡:当前电量填充区域 -->
+                <clipPath id="car-ws-clip">
+                  <path d="M170 104 C128 104 102 120 97 146 L243 146 C238 120 212 104 170 104 Z"/>
+                </clipPath>
+                <!-- 全景玻璃顶 -->
+                <clipPath id="car-glass-clip">
+                  <path d="M170 162 C210 162 238 168 242 190 C244 230 244 300 240 342 C238 370 208 384 170 384 C132 384 102 370 100 342 C96 300 96 230 98 190 C102 168 130 162 170 162 Z"/>
+                </clipPath>
+                <pattern id="car-hatch" width="7" height="7" patternUnits="userSpaceOnUse"
+                         patternTransform="rotate(45)">
+                  <rect class="hatch-bg" width="7" height="7"/>
+                  <line class="hatch-line" x1="0" y1="0" x2="0" y2="7"/>
+                </pattern>
+                <linearGradient id="car-glass-shine" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0" stop-color="#fff" stop-opacity="0.10"/>
+                  <stop offset="0.45" stop-color="#fff" stop-opacity="0"/>
+                </linearGradient>
+              </defs>
+              <!-- HUD 角标 -->
+              <path class="car-hud" d="M26 8 L8 8 L8 26 M8 434 L8 452 L26 452
+                                       M314 452 L332 452 L332 434 M332 26 L332 8 L314 8"/>
+              <!-- 轮胎(车身下层,四角探出的深色圆角块;车头朝上) -->
+              <rect class="car-tire" x="66" y="108" width="16" height="60" rx="8"/>
+              <rect class="car-tire" x="258" y="108" width="16" height="60" rx="8"/>
+              <rect class="car-tire" x="66" y="316" width="16" height="62" rx="8"/>
+              <rect class="car-tire" x="258" y="316" width="16" height="62" rx="8"/>
+              <!-- 车身底色(Model Y 圆润轮廓:短车头 + 翼子板外鼓 + 收窄车尾) -->
+              <path class="car-body-base" d="M170 52 C196 52 218 62 232 84 C243 100 251 118 256 142 C261 168 263 190 261 210 C260 228 259 244 259 258 C259 288 261 316 261 334 C260 356 255 378 245 392 C233 408 205 418 170 418 C135 418 107 408 95 392 C85 378 80 356 79 334 C79 316 81 288 81 258 C81 244 80 228 79 210 C77 190 79 168 84 142 C89 118 97 100 108 84 C122 62 144 52 170 52 Z"/>
+              <!-- 车头微光(立体感) -->
+              <path class="car-sheen" d="M170 52 C196 52 218 62 232 84 C240 96 246 108 251 122 C218 104 122 104 89 122 C94 108 100 96 108 84 C122 62 144 52 170 52 Z"/>
+              <!-- 后视镜(A 柱两侧小凸起) -->
+              <path class="car-mirror" d="M79 148 L65 151 C60 152 60 160 65 161 L79 163 Z M261 148 L275 151 C280 152 280 160 275 161 L261 163 Z"/>
+              <!-- 机盖缝线 -->
+              <path class="car-seam" d="M110 97 C140 88 200 88 230 97"/>
+              <!-- 后挡风玻璃(车尾深色小月牙,显示车内温度) -->
+              <path class="car-glazing" d="M170 396 C198 396 214 401 219 408 C210 414 192 417 170 417 C148 417 130 414 121 408 C126 401 142 396 170 396 Z"/>
+              <!-- 前风挡底色 -->
+              <path class="car-glazing" d="M170 104 C128 104 102 120 97 146 L243 146 C238 120 212 104 170 104 Z"/>
+              <!-- 前风挡:当前电量自下而上填充 -->
+              <g clip-path="url(#car-ws-clip)">
+                <rect id="carfill-batt" class="car-ws-fill" x="90" y="146" width="160" height="0"/>
+              </g>
+              <!-- 玻璃顶底色(深色,中央显示剩余读数) -->
+              <path class="car-glass-base" d="M170 162 C210 162 238 168 242 190 C244 230 244 300 240 342 C238 370 208 384 170 384 C132 384 102 370 100 342 C96 300 96 230 98 190 C102 168 130 162 170 162 Z"/>
+              <rect x="90" y="150" width="160" height="250" clip-path="url(#car-glass-clip)" fill="url(#car-glass-shine)" pointer-events="none"/>
+              <!-- 玻璃顶描边 -->
+              <path class="car-glass-line" d="M170 162 C210 162 238 168 242 190 C244 230 244 300 240 342 C238 370 208 384 170 384 C132 384 102 370 100 342 C96 300 96 230 98 190 C102 168 130 162 170 162 Z"/>
+              <!-- 能量占比环:围绕玻璃顶一圈(自顶点顺时针:未充 / 驻车耗电 / 驻车空调 / 哨兵 / 行驶 / 剩余) -->
+              <g class="car-ring">
+                <path id="carring-uncharged" class="carring" pathLength="100" stroke="url(#car-hatch)" stroke-dasharray="0 100" d="M170 158 C211 158 241 164 246 189 C249 230 249 301 244 344 C242 374 210 388 170 388 C130 388 98 374 96 344 C91 301 91 230 94 189 C99 164 129 158 170 158 Z"/>
+                <path id="carring-idle" class="carring carring-idle" pathLength="100" stroke-dasharray="0 100" d="M170 158 C211 158 241 164 246 189 C249 230 249 301 244 344 C242 374 210 388 170 388 C130 388 98 374 96 344 C91 301 91 230 94 189 C99 164 129 158 170 158 Z"/>
+                <path id="carring-climate" class="carring carring-climate" pathLength="100" stroke-dasharray="0 100" d="M170 158 C211 158 241 164 246 189 C249 230 249 301 244 344 C242 374 210 388 170 388 C130 388 98 374 96 344 C91 301 91 230 94 189 C99 164 129 158 170 158 Z"/>
+                <path id="carring-sentry" class="carring carring-sentry" pathLength="100" stroke-dasharray="0 100" d="M170 158 C211 158 241 164 246 189 C249 230 249 301 244 344 C242 374 210 388 170 388 C130 388 98 374 96 344 C91 301 91 230 94 189 C99 164 129 158 170 158 Z"/>
+                <path id="carring-drive" class="carring carring-drive" pathLength="100" stroke-dasharray="0 100" d="M170 158 C211 158 241 164 246 189 C249 230 249 301 244 344 C242 374 210 388 170 388 C130 388 98 374 96 344 C91 301 91 230 94 189 C99 164 129 158 170 158 Z"/>
+                <path id="carring-remaining" class="carring carring-remaining" pathLength="100" stroke-dasharray="0 100" d="M170 158 C211 158 241 164 246 189 C249 230 249 301 244 344 C242 374 210 388 170 388 C130 388 98 374 96 344 C91 301 91 230 94 189 C99 164 129 158 170 158 Z"/>
+              </g>
+              <!-- 车头:总里程 -->
+              <text class="car-odo-label" x="170" y="74">总里程</text>
+              <text id="car-odo" class="car-odo-val" x="170" y="91">—</text>
+              <!-- 前风挡:当前电量 -->
+              <text id="car-batt-val" class="car-batt-val" x="170" y="131">—</text>
+              <!-- 玻璃顶中央:剩余读数 -->
+              <text id="car-center-value" class="car-center-val" x="170" y="268">—</text>
+              <text id="car-center-label" class="car-center-lab" x="170" y="289">—</text>
+              <!-- 后风挡:车内温度 -->
+              <text id="car-temp-val" class="car-temp-val" x="170" y="410">—</text>
+              <!-- 车身描边(顶层) -->
+              <path class="car-body-line" d="M170 52 C196 52 218 62 232 84 C243 100 251 118 256 142 C261 168 263 190 261 210 C260 228 259 244 259 258 C259 288 261 316 261 334 C260 356 255 378 245 392 C233 408 205 418 170 418 C135 418 107 408 95 392 C85 378 80 356 79 334 C79 316 81 288 81 258 C81 244 80 228 79 210 C77 190 79 168 84 142 C89 118 97 100 108 84 C122 62 144 52 170 52 Z"/>
+            </svg>
+            <div class="wheel wheel-fl">
+              <div class="wheel-head"><span>左前</span><b id="tpms-val-fl">—</b><span class="wheel-unit">bar</span></div>
+              <div class="wheel-chart" id="chart-wfl"></div>
+            </div>
+            <div class="wheel wheel-fr">
+              <div class="wheel-head"><span>右前</span><b id="tpms-val-fr">—</b><span class="wheel-unit">bar</span></div>
+              <div class="wheel-chart" id="chart-wfr"></div>
+            </div>
+            <div class="wheel wheel-rl">
+              <div class="wheel-head"><span>左后</span><b id="tpms-val-rl">—</b><span class="wheel-unit">bar</span></div>
+              <div class="wheel-chart" id="chart-wrl"></div>
+            </div>
+            <div class="wheel wheel-rr">
+              <div class="wheel-head"><span>右后</span><b id="tpms-val-rr">—</b><span class="wheel-unit">bar</span></div>
+              <div class="wheel-chart" id="chart-wrr"></div>
+            </div>
           </div>
-          <div class="wheel wheel-fr">
-            <div class="wheel-head"><span>右前</span><b id="tpms-val-fr">—</b><span class="wheel-unit">bar</span></div>
-            <div class="wheel-chart" id="chart-wfr"></div>
-          </div>
-          <div class="wheel wheel-rl">
-            <div class="wheel-head"><span>左后</span><b id="tpms-val-rl">—</b><span class="wheel-unit">bar</span></div>
-            <div class="wheel-chart" id="chart-wrl"></div>
-          </div>
-          <div class="wheel wheel-rr">
-            <div class="wheel-head"><span>右后</span><b id="tpms-val-rr">—</b><span class="wheel-unit">bar</span></div>
-            <div class="wheel-chart" id="chart-wrr"></div>
+          <div class="temp-mini">
+            <div class="wheel-head"><span>车内温度</span><b id="intemp-val">—</b><span class="wheel-unit">°C</span></div>
+            <div class="wheel-chart" id="chart-intemp"></div>
           </div>
         </div>
         <div class="car-legend car-legend-r" id="car-legend-r"></div>
       </div>
-    </div>
-
-    <div class="card col-12" id="bh-card">
-      <div class="card-head">
-        <div>
-          <h2>电池健康</h2>
-          <div class="card-sub">按每次充电估算满电容量(充电量 ÷ 表显电量增幅),虚线为历史基准(90 分位)</div>
+      <div class="car-bh">
+        <div class="car-bh-head">
+          <div>
+            <h3>电池健康</h3>
+            <div class="car-bh-sub">按每次充电估算满电容量(充电量 ÷ 表显电量增幅),虚线为历史基准(90 分位)</div>
+          </div>
+          <div class="mini-stats" id="car-health-stats"></div>
         </div>
-        <div class="mini-stats" id="car-health-stats"></div>
+        <div class="chart chart-health" id="chart-health"></div>
       </div>
-      <div class="chart chart-health" id="chart-health"></div>
     </div>
 
     <div class="card col-12" id="cs-card">
