@@ -53,13 +53,74 @@
     const km = kmAtPct(pct);
     return km === null ? '' : `≈ ${fmtNum(km, 0)} km`;
   };
-  // 电量曲线 tooltip 的双单位补充:主单位之外的「≈ 里程 / ≈ 电量」
+
+  // 电量 ⇄ 度数(kWh)换算:kwh_per_pct 由后端按充电历史校准(充电量 ÷ 表显电量增幅)
+  const kwhPerPct = () => {
+    const v = S.overview ? Number(S.overview.kwh_per_pct) : NaN;
+    return v > 0 ? v : null;
+  };
+  const kwhAtPct = (pct) => {
+    const k = kwhPerPct();
+    const p = Number(pct);
+    if (k === null || p === null || isNaN(p)) return null;
+    return k * p;
+  };
+  const kwhSuffix = (pct) => {
+    const w = kwhAtPct(pct);
+    return w === null ? '' : `≈ ${fmtNum(w, 1)} kWh`;
+  };
+
+  // 当前生效的电量维度:所选维度的换算数据缺失时自动回退 pct
+  const battDim = () => {
+    if (S.battMode === 'km' && kmFull() !== null) return 'km';
+    if (S.battMode === 'kwh' && kwhPerPct() !== null) return 'kwh';
+    return 'pct';
+  };
+  const BATT_SERIES_NAME = { pct: '电量', kwh: '剩余电量(折算)', km: '剩余里程(折算)' };
+  const BATT_UNIT = { pct: '%', kwh: 'kWh', km: 'km' };
+  // 电量值按当前维度格式化主单位(如「42%」「35.6 kWh」「353 km」)
+  const battVal = (pct) => {
+    const dim = battDim();
+    if (dim === 'km') { const v = kmAtPct(pct); if (v !== null) return `${fmtNum(v, 0)} km`; }
+    if (dim === 'kwh') { const v = kwhAtPct(pct); if (v !== null) return `${fmtNum(v, 1)} kWh`; }
+    return `${fmtNum(pct, 0)}%`;
+  };
+  // 当前维度之外的其他维度提示,如「42% · ≈ 353 km」
+  const battAlt = (pct) => {
+    const p = Number(pct);
+    if (pct === null || pct === undefined || isNaN(p)) return '';
+    const dim = battDim();
+    const parts = [];
+    if (dim !== 'pct') parts.push(`${fmtNum(p, 0)}%`);
+    if (dim !== 'kwh') { const w = kwhAtPct(p); if (w !== null) parts.push(`≈ ${fmtNum(w, 1)} kWh`); }
+    if (dim !== 'km') { const m = kmAtPct(p); if (m !== null) parts.push(`≈ ${fmtNum(m, 0)} km`); }
+    return parts.join(' · ');
+  };
+  // 电量曲线数据按当前维度换算(折算失败点剔除)
+  const battSeriesData = (data) => {
+    const dim = battDim();
+    if (dim === 'pct') return data;
+    const conv = dim === 'km' ? kmAtPct : kwhAtPct;
+    return data.map(([t, p]) => [t, conv(p)]).filter((p) => p[1] !== null);
+  };
+  const battAxisMax = () => {
+    const dim = battDim();
+    if (dim === 'km') return Math.ceil(kmFull() / 100) * 100;
+    if (dim === 'kwh') return Math.ceil(kwhAtPct(100) / 10) * 10;
+    return 100;
+  };
+
+  // 电量曲线 tooltip 的双单位补充:主单位之外的其他维度
   const dualBatt = {
-    '仪表电量': (v) => kmSuffix(v),
-    '电量': (v) => kmSuffix(v),
+    '仪表电量': (v) => battAlt(v),
+    '电量': (v) => battAlt(v),
     '剩余里程(折算)': (v) => {
       const f = kmFull();
-      return !f ? '' : `≈ ${fmtNum(v / f * 100, 0)}%`;
+      return !f ? '' : battAlt(v / f * 100);
+    },
+    '剩余电量(折算)': (v) => {
+      const k = kwhPerPct();
+      return !k ? '' : battAlt(v / k);
     },
   };
 
@@ -139,19 +200,19 @@
   function battToggleEl() {
     const seg = el('div', 'seg mini batt-toggle');
     seg.setAttribute('role', 'group');
-    seg.setAttribute('aria-label', '电量/里程切换');
-    ['pct', 'km'].forEach((m) => {
+    seg.setAttribute('aria-label', '电量/度数/里程切换');
+    ['pct', 'kwh', 'km'].forEach((m) => {
       const b = el('button', m === S.battMode ? 'on' : '');
       b.type = 'button';
       b.dataset.mode = m;
-      b.textContent = m === 'pct' ? '电量 %' : '里程 km';
+      b.textContent = m === 'pct' ? '电量 %' : m === 'kwh' ? '度数 kWh' : '里程 km';
       seg.appendChild(b);
     });
     return seg;
   }
 
   function setBattMode(mode) {
-    if (mode !== 'pct' && mode !== 'km') return;
+    if (mode !== 'pct' && mode !== 'kwh' && mode !== 'km') return;
     S.battMode = mode;
     localStorage.setItem('ttv-batt-mode', mode);
     document.querySelectorAll('.batt-toggle button').forEach((b) =>
@@ -260,15 +321,22 @@
     const outT = lat ? Number(lat.outside_temp) : null;
     const inT = lat ? Number(lat.inside_temp) : null;
 
-    // 电量卡:主值可按电量 / 里程切换,副信息固定同时展示两者
-    const kmMode = S.battMode === 'km' && kmFull() !== null;
+    // 电量卡:主值可按电量 / 度数 / 里程切换,副信息固定同时展示各维度
+    const dim = battDim();
+    const battKwh = kwhAtPct(usable);
     const battTileSub = (batt === null ? '—' : `仪表电量 ${fmtNum(batt, 0)}%`) +
+      (battKwh !== null ? ` · 约 ${fmtNum(battKwh, 1)} kWh` : '') +
       (rated !== null ? ` · 额定续航 ${fmtNum(rated, 0)} km` : '');
-    box.appendChild(tile(kmMode ? '剩余里程' : '电量',
-      kmMode
+    box.appendChild(tile(
+      dim === 'km' ? '剩余里程' : dim === 'kwh' ? '剩余电量' : '电量',
+      dim === 'km'
         ? (rated === null ? '—' : fmtNum(rated, 0))
-        : (usable === null ? '—' : fmtNum(usable, 0)),
-      kmMode ? (rated === null ? '' : 'km') : (usable === null ? '' : '%'),
+        : dim === 'kwh'
+          ? (battKwh === null ? '—' : fmtNum(battKwh, 1))
+          : (usable === null ? '—' : fmtNum(usable, 0)),
+      dim === 'km' ? (rated === null ? '' : 'km')
+        : dim === 'kwh' ? (battKwh === null ? '' : 'kWh')
+          : (usable === null ? '' : '%'),
       battTileSub, usable, battToggleEl()));
     box.appendChild(tile('额定续航', fmtNum(rated, 0), 'km',
       '由车辆 API 上报', null));
@@ -331,15 +399,19 @@
     $('#sw-version').textContent = o.software_version ? `v${o.software_version}` : '';
     $('#updated-at').textContent = o.latest ? `数据更新 ${fmtTime(Number(o.latest.date_ts))}` : '暂无数据';
 
-    // 电量胶囊:跟随全局 电量%⇄里程km 模式;里程直接用最新额定续航
+    // 电量胶囊:跟随全局 电量%⇄度数kWh⇄里程km 模式;里程直接用最新额定续航
     const lat = o.latest;
     const usable = lat && lat.usable_battery_level != null ? Number(lat.usable_battery_level)
       : (lat && lat.battery_level != null ? Number(lat.battery_level) : null);
     const rated = lat && lat.rated_battery_range_km != null ? Number(lat.rated_battery_range_km) : null;
-    const kmMode = S.battMode === 'km' && kmFull() !== null;
-    $('#batt-text').textContent = kmMode && rated !== null
-      ? `${fmtNum(rated, 0)} km`
-      : (usable === null ? '—' : `${fmtNum(usable, 0)}%`);
+    const dim = battDim();
+    const usableKwh = kwhAtPct(usable);
+    $('#batt-text').textContent =
+      dim === 'km' && rated !== null
+        ? `${fmtNum(rated, 0)} km`
+        : dim === 'kwh' && usableKwh !== null
+          ? `${fmtNum(usableKwh, 1)} kWh`
+          : (usable === null ? '—' : `${fmtNum(usable, 0)}%`);
     const pct = usable === null ? 0 : Math.min(100, Math.max(0, usable));
     $('#batt-fill').setAttribute('width', (19 * pct / 100).toFixed(1));
     $('#batt-pill').dataset.level =
@@ -374,15 +446,13 @@
       .filter((p) => p.rated_battery_range_km !== null && p.rated_battery_range_km !== undefined)
       .map((p) => [Number(p.date_ts), p.rated_battery_range_km]);
 
-    // 电量曲线:可按电量 / 里程维度查看(里程按满电额定续航折算)
-    const fullKm = kmFull();
-    const kmMode = S.battMode === 'km' && fullKm !== null;
-    const battSeries = kmMode
-      ? battData.map(([t, p]) => [t, kmAtPct(p)]).filter((p) => p[1] !== null)
-      : battData;
+    // 电量曲线:可按电量 / 度数 / 里程维度查看(折算见换算系数)
+    const dim = battDim();
+    const battSeries = battSeriesData(battData);
+    const battName = dim === 'pct' ? '仪表电量' : BATT_SERIES_NAME[dim];
     // 单序列图表:标题即命名,无需图例
     const base = {
-      tooltip: tooltipAxis({ '仪表电量': '%', '剩余里程(折算)': 'km', '额定续航': 'km' },
+      tooltip: tooltipAxis({ '仪表电量': '%', '剩余电量(折算)': 'kWh', '剩余里程(折算)': 'km', '额定续航': 'km' },
         (v) => fmtTime(v, true), dualBatt),
       grid: trendGrid(24),
     };
@@ -391,11 +461,11 @@
       xAxis: timeAxis(S.days),
       yAxis: Object.assign(axisCommon(), {
         type: 'value', min: 0,
-        max: kmMode ? Math.ceil(fullKm / 100) * 100 : 100,
+        max: battAxisMax(),
         axisLabel: { color: cssVar('--text-muted'), fontSize: 11,
-          formatter: kmMode ? '{value}' : '{value}%' },
+          formatter: dim === 'pct' ? '{value}%' : '{value}' },
       }),
-      series: [lineSeries(kmMode ? '剩余里程(折算)' : '仪表电量', battSeries,
+      series: [lineSeries(battName, battSeries,
         cssVar('--series-1'))],
     }), { notMerge: true });
 
@@ -560,12 +630,9 @@
     const batt = a.battery.map((p) => [Number(p[0]), Number(p[1])]);
     // 窄屏:y 轴标签绘制在图内,无需 96px 左边距,留出更多绘图区
     const narrow = isNarrow();
-    // 电量 ⇄ 里程维度切换
-    const fullKm = kmFull();
-    const kmMode = S.battMode === 'km' && fullKm !== null;
-    const battLine = kmMode
-      ? batt.map(([t, p]) => [t, kmAtPct(p)]).filter((p) => p[1] !== null)
-      : batt;
+    // 电量 ⇄ 度数 ⇄ 里程维度切换
+    const dim = battDim();
+    const battLine = battSeriesData(batt);
 
     // 每一天的分隔:本地零点竖虚线
     const midnights = [];
@@ -591,7 +658,7 @@
         title: '充电', body: `${fmtNum(c.charge_energy_added, 1)} kWh · ` +
           `${fmtNum(c.start_battery_level, 0)}% → ${fmtNum(c.end_battery_level, 0)}%` +
           (c.start_battery_level !== null && c.end_battery_level !== null
-            ? ` · 增加 ${kmSuffix(Number(c.end_battery_level) - Number(c.start_battery_level))}` : '') +
+            ? ` · 增加 ${kmSuffix(Number(c.end_battery_level) - Number(c.start_battery_level))} ${kwhSuffix(Number(c.end_battery_level) - Number(c.start_battery_level))}` : '') +
           (c.cost !== null && c.cost !== undefined ? ` · ¥${fmtNum(c.cost, 2)}` : '') +
           `${c.address_name ? ` · ${c.address_name}` : ''}`,
       },
@@ -600,7 +667,7 @@
       0, p.s, p.e, catColor('sentry'),
       {
         kind: 'sentry', s: p.s, e: p.e,
-        title: '哨兵耗电', body: `${fmtNum(p.dur_min, 0)} 分钟 · 耗电 ${fmtNum(-p.delta, 0)}% ${kmSuffix(-p.delta)}` +
+        title: '哨兵耗电', body: `${fmtNum(p.dur_min, 0)} 分钟 · 耗电 ${battVal(-p.delta)}${battAlt(-p.delta) ? ' · ' + battAlt(-p.delta) : ''}` +
           (p.rate_pct_h !== null ? ` · 约 ${fmtNum(p.rate_pct_h, 2)} %/h` : ''),
       },
     ]));
@@ -609,7 +676,7 @@
       {
         kind: 'idle', s: p.s, e: p.e,
         title: p.kind === 'climate' ? '驻车耗电(空调)' : '驻车耗电(休眠)',
-        body: `${fmtNum(p.dur_min, 0)} 分钟 · 耗电 ${fmtNum(-p.delta, 0)}% ${kmSuffix(-p.delta)}`,
+        body: `${fmtNum(p.dur_min, 0)} 分钟 · 耗电 ${battVal(-p.delta)}${battAlt(-p.delta) ? ' · ' + battAlt(-p.delta) : ''}`,
       },
     ]));
 
@@ -620,7 +687,7 @@
 
     charts.activity.setOption(Object.assign({}, chartTheme(), {
       animation: false,
-      tooltip: tooltipAxis({ '电量': '%', '剩余里程(折算)': 'km' },
+      tooltip: tooltipAxis({ '电量': '%', '剩余电量(折算)': 'kWh', '剩余里程(折算)': 'km' },
         (v) => fmtTime(v, true), dualBatt),
       axisPointer: { link: [{ xAxisIndex: 'all' }] },
       grid: [
@@ -641,9 +708,9 @@
       yAxis: [
         Object.assign(axisCommon(), {
           type: 'value', min: 0,
-          max: kmMode ? Math.ceil(fullKm / 100) * 100 : 100,
+          max: battAxisMax(),
           axisLabel: { color: cssVar('--text-muted'), fontSize: 11,
-            formatter: kmMode ? '{value}' : '{value}%', inside: true },
+            formatter: dim === 'pct' ? '{value}%' : '{value}', inside: true },
         }),
         Object.assign(axisCommon(), {
           gridIndex: 1, type: 'value', min: 0, max: 2, interval: 0.5,
@@ -655,7 +722,7 @@
         }),
       ],
       series: [
-        Object.assign(lineSeries(kmMode ? '剩余里程(折算)' : '电量', battLine,
+        Object.assign(lineSeries(BATT_SERIES_NAME[dim], battLine,
           cssVar('--series-1')), {
           markLine: {
             silent: true, symbol: 'none',
@@ -738,47 +805,67 @@
       return `${fmtNum(m.distance, 1)} km · ${fmtNum(m.duration_min, 0)} 分` +
         (eff !== null ? ` · 约 ${fmtNum(eff, 0)} Wh/km` : '') +
         (m.start_name || m.end_name ? ` · ${m.start_name || '—'} → ${m.end_name || '—'}` : '') +
-        (m.cost_yuan !== null && m.cost_yuan !== undefined
-          ? ` · 电费 ¥${fmtNum(m.cost_yuan, 2)}` +
-            (m.cost_per_km_yuan !== null && m.cost_per_km_yuan !== undefined
-              ? ` (¥${fmtNum(m.cost_per_km_yuan, 2)}/km)` : '') : '');
+        (m.cost_per_km_yuan !== null && m.cost_per_km_yuan !== undefined
+          ? ` · ¥${fmtNum(m.cost_per_km_yuan, 2)}/km` : '');
+    }
+    if (ev.kind === 'charge') {
+      return `${fmtNum(m.duration_min, 0)} 分` +
+        `${m.address_name ? ` · ${m.address_name}` : ''}` +
+        (m.rate_yuan_kwh !== null && m.rate_yuan_kwh !== undefined
+          ? ` · ¥${fmtNum(m.rate_yuan_kwh, 2)}/kWh` : '');
+    }
+    const tag = m.kind === 'climate' ? '(空调)' : ev.kind === 'sentry' ? '' : '(休眠)';
+    return `${fmtNum(m.dur_min, 0)} 分钟${tag}` +
+      (ev.kind === 'sentry' && m.rate_pct_h !== null
+        ? ` · 约 ${fmtNum(m.rate_pct_h, 2)} %/h` : '');
+  }
+
+  // 事件数值列:电量% / 度数kWh / 里程km / 电费¥(充电为增加量与已付费用,其余为消耗)
+  function eventNums(ev) {
+    const m = ev.meta;
+    const na = { batt: '—', kwh: '—', km: '—', cost: '—', up: false };
+    if (ev.kind === 'drive') {
+      const battDrop = (m.start_battery_level !== null && m.start_battery_level !== undefined &&
+          m.end_battery_level !== null && m.end_battery_level !== undefined)
+        ? Number(m.start_battery_level) - Number(m.end_battery_level) : null;
+      const delta = (m.start_ideal_range_km !== null && m.end_ideal_range_km !== null)
+        ? Number(m.start_ideal_range_km) - Number(m.end_ideal_range_km) : null;
+      return {
+        batt: battDrop === null ? '—' : battDrop <= 0 ? '0%' : `-${fmtNum(battDrop, 0)}%`,
+        kwh: m.energy_kwh === null || m.energy_kwh === undefined ? '—' : `-${fmtNum(m.energy_kwh, 1)}`,
+        km: delta === null ? '—' : `-${fmtNum(delta, 1)}`,
+        cost: m.cost_yuan === null || m.cost_yuan === undefined ? '—' : `¥${fmtNum(m.cost_yuan, 2)}`,
+        up: false,
+      };
     }
     if (ev.kind === 'charge') {
       const up = (m.start_battery_level !== null && m.end_battery_level !== null)
         ? Number(m.end_battery_level) - Number(m.start_battery_level) : null;
-      return `${fmtNum(m.charge_energy_added, 1)} kWh · ${fmtNum(m.duration_min, 0)} 分` +
-        (up !== null ? ` · 电量 +${fmtNum(up, 0)}% ${kmSuffix(up)}` : '') +
-        `${m.address_name ? ` · ${m.address_name}` : ''}` +
-        (m.cost !== null && m.cost !== undefined ? ` · 费用 ¥${fmtNum(m.cost, 2)}` : '') +
-        (m.rate_yuan_kwh !== null && m.rate_yuan_kwh !== undefined
-          ? ` (¥${fmtNum(m.rate_yuan_kwh, 2)}/kWh)` : '');
+      const km = kmAtPct(up);
+      return {
+        batt: up === null ? '—' : `+${fmtNum(up, 0)}%`,
+        kwh: m.charge_energy_added === null || m.charge_energy_added === undefined
+          ? '—' : `+${fmtNum(m.charge_energy_added, 1)}`,
+        km: km === null ? '—' : `+${fmtNum(km, 0)}`,
+        cost: m.cost === null || m.cost === undefined ? '—' : `¥${fmtNum(m.cost, 2)}`,
+        up: true,
+      };
     }
-    const tag = m.kind === 'climate' ? '(空调)' : ev.kind === 'sentry' ? '' : '(休眠)';
-    const body = `${fmtNum(m.dur_min, 0)} 分钟 · 耗电 ${fmtNum(-m.delta, 0)}% ${kmSuffix(-m.delta)}${tag}` +
-      (ev.kind === 'sentry' && m.rate_pct_h !== null
-        ? ` · 约 ${fmtNum(m.rate_pct_h, 2)} %/h` : '') +
-      (m.cost_yuan !== null && m.cost_yuan !== undefined
-        ? ` · 电费约 ¥${fmtNum(m.cost_yuan, 2)}` : '');
-    return body;
+    // 耗电为降幅;采样取整可能出现 ±0.0x 的抖动,钳到 0 避免「-0」
+    const drop = Math.max(0, -m.delta);
+    const km = kmAtPct(drop);
+    return {
+      batt: drop <= 0 ? '0%' : `-${fmtNum(drop, 0)}%`,
+      kwh: m.energy_kwh === null || m.energy_kwh === undefined ? '—'
+        : m.energy_kwh <= 0 ? '0.0' : `-${fmtNum(m.energy_kwh, 1)}`,
+      km: km === null ? '—' : km <= 0 ? '0' : `-${fmtNum(km, 0)}`,
+      cost: m.cost_yuan === null || m.cost_yuan === undefined ? '—' : `¥${fmtNum(m.cost_yuan, 2)}`,
+      up: false,
+    };
   }
 
   function o_kwh() {
     return S.overview ? (S.overview.kwhPerIdealKm || 0) : 0;
-  }
-
-  function eventDelta(ev) {
-    const m = ev.meta;
-    if (ev.kind === 'charge') {
-      const up = (m.start_battery_level !== null && m.end_battery_level !== null)
-        ? Number(m.end_battery_level) - Number(m.start_battery_level) : null;
-      return up === null ? null : { text: `+${fmtNum(up, 0)}%`, up: true };
-    }
-    if (ev.kind === 'drive') {
-      const delta = (m.start_ideal_range_km !== null && m.end_ideal_range_km !== null)
-        ? Number(m.start_ideal_range_km) - Number(m.end_ideal_range_km) : null;
-      return delta === null ? null : { text: `-${fmtNum(delta, 1)} km`, up: false };
-    }
-    return { text: `-${fmtNum(-m.delta, 0)}%`, up: false };
   }
 
   function renderEvents() {
@@ -793,6 +880,13 @@
       box.appendChild(el('div', 'events-empty', '所选时间范围内暂无活动数据'));
       return;
     }
+
+    // 列头:与 .ev-row 同一套栅格(窄屏隐藏,改由数值格自带小标签)
+    const headRow = el('div', 'ev-row ev-head');
+    ['时间', '类型', '详情', '电量', '度数', '里程', '电费'].forEach((t, i) =>
+      headRow.appendChild(el('span',
+        ['ev-time', 'ev-chip', 'ev-desc', 'ev-num', 'ev-num', 'ev-num', 'ev-num'][i], t)));
+    box.appendChild(headRow);
 
     groups.forEach((evs, key) => {
       const isToday = key === dayKey(Date.now());
@@ -817,9 +911,13 @@
         row.appendChild(el('span', 'ev-time', eventTime(ev.s, ev.e)));
         row.appendChild(el('span', 'ev-chip ' + CAT[ev.kind].cls, CAT[ev.kind].label));
         row.appendChild(el('span', 'ev-desc', eventDesc(ev)));
-        const d = eventDelta(ev);
-        row.appendChild(el('span', 'ev-delta' + (d && d.up ? ' up' : ''),
-          d ? d.text : '—'));
+        const nums = eventNums(ev);
+        [['电量', nums.batt], ['度数', nums.kwh], ['里程', nums.km], ['电费', nums.cost]]
+          .forEach(([lab, text]) => {
+            const cell = el('span', 'ev-num' + (nums.up && lab !== '电费' ? ' up' : ''), text);
+            cell.dataset.lab = lab;
+            row.appendChild(cell);
+          });
         body.appendChild(row);
       });
       grp.appendChild(body);
@@ -850,8 +948,11 @@
       stats.appendChild(t);
     }
     stat('哨兵总时长', hours, '小时');
-    stat('哨兵耗电', drain, '%', kmSuffix(drain));
-    stat('平均耗电速率', hours > 0 ? drain / hours : 0, '%/h');
+    const dim = battDim();
+    const drainVal = dim === 'km' ? kmAtPct(drain) : dim === 'kwh' ? kwhAtPct(drain) : drain;
+    stat('哨兵耗电', drainVal === null ? 0 : drainVal, BATT_UNIT[dim], battAlt(drain));
+    const rateVal = hours > 0 ? (drainVal === null ? 0 : drainVal) / hours : 0;
+    stat('平均耗电速率', rateVal, BATT_UNIT[dim] + '/h');
     stat('哨兵时段数', sentry.length, '');
 
     // 按天拆分哨兵时段(跨零点切开)
@@ -904,7 +1005,7 @@
             `${dayLabel(m.d.ms)} · 哨兵开启</div>` +
             `<div><b>${hh((m.seg.s - m.d.ms) / 3600000)} – ${hh((m.seg.e - m.d.ms) / 3600000)}</b></div>` +
             `<div style="color:${cssVar('--text-secondary')};margin-top:2px">` +
-            `约 ${fmtNum(m.seg.dur_min, 0)} 分钟 · 耗电 ${fmtNum(-m.seg.delta, 0)}% ${kmSuffix(-m.seg.delta)}` +
+            `约 ${fmtNum(m.seg.dur_min, 0)} 分钟 · 耗电 ${battVal(-m.seg.delta)}${battAlt(-m.seg.delta) ? ' · ' + battAlt(-m.seg.delta) : ''}` +
             (m.seg.rate_pct_h !== null ? ` · ${fmtNum(m.seg.rate_pct_h, 2)} %/h` : '') + `</div>`;
         },
       },
@@ -938,24 +1039,24 @@
     }), { notMerge: true });
 
     // 哨兵耗电曲线:仅取哨兵时段内的电量采样,时段间断开
-    const fullKm = kmFull();
-    const kmMode = S.battMode === 'km' && fullKm !== null;
+    const dimDrain = battDim();
     const drainData = [];
     sentry.forEach((p) => {
       for (const [t, l] of a.battery) {
-        if (t >= p.s && t <= p.e) drainData.push(kmMode ? [t, kmAtPct(l)] : [t, l]);
+        if (t >= p.s && t <= p.e) drainData.push([t, l]);
       }
     });
+    const drainSeries = battSeriesData(drainData);
     charts.sentryDrain.setOption(Object.assign({}, chartTheme(), {
       animation: false,
-      tooltip: tooltipAxis({ '电量': '%', '剩余里程(折算)': 'km' },
+      tooltip: tooltipAxis({ '电量': '%', '剩余电量(折算)': 'kWh', '剩余里程(折算)': 'km' },
         (v) => fmtTime(v, true), dualBatt),
       grid: trendGrid(24),
       xAxis: Object.assign(timeAxis(S.days), { min: domain.min, max: domain.max }),
       yAxis: Object.assign(axisCommon(), { type: 'value', scale: true,
         axisLabel: { color: cssVar('--text-muted'), fontSize: 11,
-          formatter: kmMode ? '{value}' : '{value}%' } }),
-      series: [Object.assign(lineSeries(kmMode ? '剩余里程(折算)' : '电量', drainData,
+          formatter: dimDrain === 'pct' ? '{value}%' : '{value}' } }),
+      series: [Object.assign(lineSeries(BATT_SERIES_NAME[dimDrain], drainSeries,
         cssVar('--series-1')), {
         connectNulls: false,
       })],
@@ -2227,10 +2328,12 @@
       refresh();
     });
 
-    // 点击标题刷新;点击电量胶囊切换 电量 ⇄ 续航
+    // 点击标题刷新;点击电量胶囊循环切换 电量% → 度数kWh → 续航km
     $('#title-refresh').addEventListener('click', refresh);
     const pill = $('#batt-pill');
-    const togglePill = () => setBattMode(S.battMode === 'km' ? 'pct' : 'km');
+    const PILL_ORDER = ['pct', 'kwh', 'km'];
+    const togglePill = () =>
+      setBattMode(PILL_ORDER[(PILL_ORDER.indexOf(S.battMode) + 1) % PILL_ORDER.length]);
     pill.addEventListener('click', togglePill);
     pill.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePill(); }
