@@ -117,6 +117,8 @@
                   <stop offset="0.45" stop-color="#fff" stop-opacity="0"/>
                 </linearGradient>
               </defs>
+              <!-- 手机端整体放大车辆用(裁掉 HUD 角标与留白),见 style.css #car-zoom -->
+              <g id="car-zoom">
               <!-- HUD 角标 -->
               <path class="car-hud" d="M26 8 L8 8 L8 26 M8 434 L8 452 L26 452
                                        M314 452 L332 452 L332 434 M332 26 L332 8 L314 8"/>
@@ -173,6 +175,7 @@
               <text id="car-temp-val" class="car-temp-val" x="170" y="410">—</text>
               <!-- 车身描边(顶层) -->
               <path class="car-body-line" d="M170 52 C196 52 218 62 232 84 C243 100 251 118 256 142 C261 168 263 190 261 210 C260 228 259 244 259 258 C259 288 261 316 261 334 C260 356 255 378 245 392 C233 408 205 418 170 418 C135 418 107 408 95 392 C85 378 80 356 79 334 C79 316 81 288 81 258 C81 244 80 228 79 210 C77 190 79 168 84 142 C89 118 97 100 108 84 C122 62 144 52 170 52 Z"/>
+              </g>
             </svg>
             <div class="wheel wheel-fl">
               <div class="wheel-head"><b id="tpms-val-fl">—</b><span class="wheel-unit">bar</span></div>

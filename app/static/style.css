@@ -1467,11 +1467,18 @@ footer a { color: var(--text-muted); }
   .chip-legend { gap: 10px; }
   .mini-stat { padding: 5px 10px; }
 
-  /* 车辆总览:手机端仍两列夹车辆;舞台按车图比例伸缩,轮子面板收窄贴舞台四角 */
+  /* 车辆总览:手机端仍两列夹车辆;舞台按车图比例伸缩,轮子面板收窄贴舞台四角;
+     车图内容整体放大 1.32 倍(裁掉 HUD 角标与四周留白),让车在框内占比更大 */
   .carview { gap: 6px; }
-  .car-legend { flex: 0 0 96px; gap: 7px; }
-  .car-stage { height: auto; aspect-ratio: 340 / 470; }
-  .wheel { width: 64px; padding: 4px 5px 3px; }
+  .car-legend { flex: 0 0 88px; gap: 7px; }
+  .car-stage { height: auto; aspect-ratio: 340 / 470; overflow: hidden; }
+  .car-hud { display: none; }
+  #car-zoom {
+    transform: scale(1.32);
+    transform-origin: 170px 236px;
+    transform-box: view-box;
+  }
+  .wheel { width: 60px; padding: 4px 5px 3px; }
   .wheel-head b { font-size: 13.5px; }
   .wheel-fl { left: 0; top: 6px; }
   .wheel-fr { right: 0; top: 6px; }
