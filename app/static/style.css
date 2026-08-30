@@ -991,7 +991,12 @@ button { touch-action: manipulation; }
 
 #cs-card:not(.open) .cs-list,
 #cs-card:not(.open) .cg-divider,
-#cs-card:not(.open) .cg-list { display: none; }
+#cs-card:not(.open) .cg-list,
+#cs-card:not(.open) .cs-batt-chart,
+#cs-card:not(.open) #cs-batt-empty { display: none; }
+
+/* 充电详情内「电池电量估算」条形图 */
+.cs-batt-chart { height: 220px; margin-top: 4px; }
 
 /* 停车费卡同样整卡可折叠,默认收起 */
 #pk-card:not(.open) .pk-form,

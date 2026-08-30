@@ -1489,6 +1489,7 @@
     }
     renderSessions();
     renderChargers();
+    renderCsBatt();
     if (withCosts) { renderEvents(); renderActivity(); }
   }
 
@@ -1808,6 +1809,68 @@
       item.appendChild(detail);
       box.appendChild(item);
     });
+  }
+
+  /* ---------- 渲染:电池电量估算条形图(充电详情卡底部,并入同卡) ----------
+     每次充电:充后总电量 = 充至电量% × 估算满电;估算满电 = 充电量 ÷ 增幅
+     (与「电池健康」同口径:增幅 <10% 或估算超出 30–150 kWh 的样本不参与) */
+
+  function renderCsBatt() {
+    const box = $('#chart-cs-batt');
+    if (!box || !S.sessions) return;
+    const pts = [];
+    (S.sessions.charges || []).slice().reverse().forEach((c) => {  // 旧的在前
+      const s = c.start_battery_level, e = c.end_battery_level;
+      if (s == null || e == null || c.energy_kwh == null || !c.end_ts) return;
+      const d = e - s;
+      if (d < 10) return;
+      const full = Number(c.energy_kwh) / d * 100;
+      if (full < 30 || full > 150) return;
+      pts.push({ ts: c.end_ts, level: e, full: Math.round(full * 10) / 10,
+                 after: Math.round(e * full) / 100 });
+    });
+    const emptyEl = $('#cs-batt-empty');
+    if (!pts.length) {
+      box.style.display = 'none';
+      if (emptyEl) emptyEl.hidden = false;
+      return;
+    }
+    box.style.display = '';
+    if (emptyEl) emptyEl.hidden = true;
+    if (!charts.csBatt) charts.csBatt = echarts.init(box);
+    charts.csBatt.setOption(Object.assign({}, chartTheme(), {
+      tooltip: {
+        trigger: 'axis',
+        backgroundColor: cssVar('--surface-1'),
+        borderColor: cssVar('--border'), borderWidth: 1, padding: [6, 10],
+        textStyle: { color: cssVar('--text-primary'), fontSize: 12 },
+        extraCssText: 'box-shadow: 0 4px 16px rgba(0,0,0,.18);border-radius:8px;',
+        formatter(params) {
+          const p = pts[params[0].dataIndex];
+          const rows = params.map((m) =>
+            `${m.marker} ${m.seriesName} <b>${fmtNum(m.value[1], 1)} kWh</b>`).join('<br>');
+          return `<div style="color:${cssVar('--text-muted')};font-size:10px">` +
+                 `${fmtTime(p.ts)} · 充至 ${fmtNum(p.level, 0)}%</div>${rows}`;
+        },
+      },
+      legend: {
+        top: 0, right: 0,
+        textStyle: { color: cssVar('--text-muted'), fontSize: 11 },
+        itemWidth: 12, itemHeight: 8,
+      },
+      grid: { left: 44, right: 8, top: 30, bottom: 22 },
+      xAxis: Object.assign({ type: 'time' }, axisCommon()),
+      yAxis: Object.assign({ type: 'value', name: 'kWh', scale: true,
+        nameTextStyle: { color: cssVar('--text-muted'), fontSize: 10 } }, axisCommon()),
+      series: [
+        { name: '充后总电量', type: 'bar', barMaxWidth: 24, barGap: '25%',
+          data: pts.map((p) => [p.ts, p.after]),
+          itemStyle: { color: cssVar('--series-1'), borderRadius: [4, 4, 0, 0] } },
+        { name: '估算满电', type: 'bar', barMaxWidth: 24,
+          data: pts.map((p) => [p.ts, p.full]),
+          itemStyle: { color: cssVar('--series-3'), borderRadius: [4, 4, 0, 0] } },
+      ],
+    }), { notMerge: true });
   }
 
   /* ---------- 渲染:停车费(手动记录;默认当天,可选覆盖接下来 N 天) ---------- */
@@ -2134,6 +2197,7 @@
       renderCar();
       renderSessions();
       renderChargers();
+      renderCsBatt();
       renderParking();
       renderDaily();
       renderCharging();
@@ -2158,7 +2222,7 @@
     renderDaily(); renderCharging();
     renderRoutes(); renderRoutesList();
     renderActivity(); renderEvents(); renderSentry();
-    renderEfficiency(); renderTpms(); renderCar(); renderSessions(); renderChargers(); renderTemp(); renderParking();
+    renderEfficiency(); renderTpms(); renderCar(); renderSessions(); renderChargers(); renderCsBatt(); renderTemp(); renderParking();
   }
 
   /* ---------- 初始化 ---------- */
@@ -2253,6 +2317,7 @@
     const csToggle = () => {
       const open = csCard.classList.toggle('open');
       localStorage.setItem('ttv-cs-open', open ? '1' : '0');
+      if (open && charts.csBatt) charts.csBatt.resize();
     };
     csHead.addEventListener('click', csToggle);
     csHead.addEventListener('keydown', (e) => {
