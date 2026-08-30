@@ -890,6 +890,17 @@ button { touch-action: manipulation; }
 
 .mini-stat b { color: var(--text-primary); font-weight: 600; }
 
+/* 折叠卡(充电详情/停车费)头部的缩略统计:整组靠右贴箭头,
+   芯片统一宽度、内容两端分布,上下两张卡的芯片才能逐列对齐 */
+.card.collapsible .mini-stats { margin-left: auto; }
+
+.card.collapsible .mini-stat {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 140px;
+}
+
 /* ===== 活动事件列表 ===== */
 .day-group {
   border: 1px solid var(--border);
