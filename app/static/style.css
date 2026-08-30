@@ -978,6 +978,10 @@ button { touch-action: manipulation; }
 #cs-card:not(.open) .cg-divider,
 #cs-card:not(.open) .cg-list { display: none; }
 
+/* 停车费卡同样整卡可折叠,默认收起 */
+#pk-card:not(.open) .pk-form,
+#pk-card:not(.open) .pk-list { display: none; }
+
 /* 充电桩统计并入充电详情卡后的分隔小标题 */
 .cg-divider {
   margin: 14px 4px 8px;

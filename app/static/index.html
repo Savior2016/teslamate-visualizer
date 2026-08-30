@@ -208,13 +208,14 @@
       <div class="cg-list" id="cg-list"></div>
     </div>
 
-    <div class="card col-12" id="pk-card">
-      <div class="card-head">
+    <div class="card col-12 collapsible" id="pk-card">
+      <div class="card-head" id="pk-head" role="button" tabindex="0" title="点击展开 / 收起">
         <div>
           <h2>停车费</h2>
           <div class="card-sub">手动记录停车费用,默认记为当天;可选择费用覆盖接下来多少天</div>
         </div>
         <div class="mini-stats" id="pk-stats"></div>
+        <span class="chev card-chev">▾</span>
       </div>
       <div class="pk-form">
         <input type="number" id="pk-cost" placeholder="金额 ¥" min="0" step="0.01" inputmode="decimal">

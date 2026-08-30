@@ -2261,6 +2261,19 @@
 
     initParking();
 
+    // 停车费:整卡可折叠,默认收起,展开状态跨会话记忆(与充电详情同款)
+    const pkCard = $('#pk-card');
+    if (localStorage.getItem('ttv-pk-open') === '1') pkCard.classList.add('open');
+    const pkHead = $('#pk-head');
+    const pkToggle = () => {
+      const open = pkCard.classList.toggle('open');
+      localStorage.setItem('ttv-pk-open', open ? '1' : '0');
+    };
+    pkHead.addEventListener('click', pkToggle);
+    pkHead.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pkToggle(); }
+    });
+
     $('#events-toggle-btn').addEventListener('click', () => {
       const groups = document.querySelectorAll('#events-list .day-group');
       const anyClosed = Array.from(groups).some((g) => !g.classList.contains('open'));
