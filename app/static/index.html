@@ -122,9 +122,9 @@
               <path class="car-glazing" d="M170 396 C198 396 214 401 219 408 C210 414 192 417 170 417 C148 417 130 414 121 408 C126 401 142 396 170 396 Z"/>
               <!-- 前风挡底色 -->
               <path class="car-glazing" d="M170 104 C128 104 102 120 97 146 L243 146 C238 120 212 104 170 104 Z"/>
-              <!-- 前风挡:当前电量自下而上填充 -->
+              <!-- 前风挡:当前电量横向填充(左→右) -->
               <g clip-path="url(#car-ws-clip)">
-                <rect id="carfill-batt" class="car-ws-fill" x="90" y="146" width="160" height="0"/>
+                <rect id="carfill-batt" class="car-ws-fill" x="97" y="104" width="0" height="42"/>
               </g>
               <!-- 玻璃顶底色(深色,中央显示剩余读数) -->
               <path class="car-glass-base" d="M170 162 C210 162 238 168 242 190 C244 230 244 300 240 342 C238 370 208 384 170 384 C132 384 102 370 100 342 C96 300 96 230 98 190 C102 168 130 162 170 162 Z"/>
@@ -145,10 +145,11 @@
               <text id="car-odo" class="car-odo-val" x="170" y="91">—</text>
               <!-- 前风挡:当前电量 -->
               <text id="car-batt-val" class="car-batt-val" x="170" y="131">—</text>
-              <!-- 玻璃顶中央:剩余读数 -->
-              <text id="car-center-value" class="car-center-val" x="170" y="268">—</text>
-              <text id="car-center-label" class="car-center-lab" x="170" y="289">—</text>
-              <!-- 后风挡:车内温度 -->
+              <!-- 玻璃顶中央:车型徽章(非 Y L 回退文字),下方车内温度 -->
+              <image id="car-badge" x="102" y="240" width="136" height="14.5" href="/model-yl-badge.png"/>
+              <text id="car-center-model" class="car-center-model" x="170" y="258" style="display:none">—</text>
+              <text id="car-center-temp" class="car-center-temp" x="170" y="296">—</text>
+              <!-- 后风挡:车外温度 -->
               <text id="car-temp-val" class="car-temp-val" x="170" y="410">—</text>
               <!-- 车身描边(顶层) -->
               <path class="car-body-line" d="M170 52 C196 52 218 62 232 84 C243 100 251 118 256 142 C261 168 263 190 261 210 C260 228 259 244 259 258 C259 288 261 316 261 334 C260 356 255 378 245 392 C233 408 205 418 170 418 C135 418 107 408 95 392 C85 378 80 356 79 334 C79 316 81 288 81 258 C81 244 80 228 79 210 C77 190 79 168 84 142 C89 118 97 100 108 84 C122 62 144 52 170 52 Z"/>

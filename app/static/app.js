@@ -1160,8 +1160,6 @@
         const p = $(`#carring-${k}`);
         if (p) p.setAttribute('stroke-dasharray', '0 100');
       });
-      $('#car-center-value').textContent = '—';
-      $('#car-center-label').textContent = '暂无充电周期';
     } else {
       // 顶点起第一段斜纹 = 本次未充(100% − 充至电量);充入区各段按估算值归一化填满
       const inner = [
@@ -1180,11 +1178,6 @@
         setRing(k, 100 - cum, frac);
         cum -= frac;
       });
-      // 玻璃顶中央读数 = 剩余(跟随 电量/度数/里程 切换)
-      const rc = carConvPct(Number(cyc.remaining_pct), cyc.cap_kwh || 84);
-      $('#car-center-value').textContent =
-        rc.v === null ? '—' : `${fmtNum(rc.v, rc.dec)} ${rc.unit}`;
-      $('#car-center-label').textContent = cyc.active ? '当前剩余' : '周期末剩余';
     }
 
     /* --- 左列:里程统计(额定续航 / 本月里程 / 本周里程,仅展示) --- */
@@ -1210,18 +1203,29 @@
       statCol.appendChild(d);
     });
 
-    /* --- 车身读数:车头总里程 / 前风挡当前电量填充 / 后风挡车内温度 --- */
+    /* --- 车身读数:车头总里程 / 前风挡电量横向填充 / 玻璃中央徽章+车内温度 / 后风挡车外温度 --- */
     $('#car-odo').textContent = odo === null ? '—' : `${fmtNum(odo, 0)} km`;
     const wr = $('#carfill-batt');
     if (wr) {
-      const WH = 42;  // 前风挡高度(y 104..146),自下而上填充
-      const h = usable === null ? 0 : Math.max(0, Math.min(100, usable)) / 100 * WH;
-      wr.setAttribute('y', (146 - h).toFixed(1));
-      wr.setAttribute('height', h.toFixed(1));
+      const WW = 146;  // 前风挡宽(x 97..243),横向填充
+      wr.setAttribute('width',
+        (usable === null ? 0 : Math.max(0, Math.min(100, usable)) / 100 * WW).toFixed(1));
     }
     $('#car-batt-val').textContent = usable === null ? '—' : `${fmtNum(usable, 0)}%`;
+    // 车型徽章:Model Y L 显示官方尾标图,其他车型回退文字
+    const car0 = o.cars.find((c) => c.id === S.carId) || o.cars[0];
+    const isYL = !!car0 && TRIM_LABEL[`${car0.model}|${car0.trim_badging || ''}`] === 'Model Y L';
+    const badgeImg = $('#car-badge');
+    if (badgeImg) badgeImg.style.display = isYL ? '' : 'none';
+    const cm = $('#car-center-model');
+    if (cm) {
+      cm.style.display = isYL ? 'none' : '';
+      if (!isYL) cm.textContent = car0 ? (MODEL_LABEL[car0.model] || car0.model || '') : '';
+    }
     const inT = lat && lat.inside_temp != null ? Number(lat.inside_temp) : null;
-    $('#car-temp-val').textContent = inT === null ? '—' : `${fmtNum(inT, 1)}°`;
+    const outT = lat && lat.outside_temp != null ? Number(lat.outside_temp) : null;
+    $('#car-center-temp').textContent = inT === null ? '—' : `车内 ${fmtNum(inT, 1)}°`;
+    $('#car-temp-val').textContent = outT === null ? '—' : `${fmtNum(outT, 1)}°`;
     const itv = $('#intemp-val');
     if (itv) itv.textContent = inT === null ? '—' : fmtNum(inT, 1);
 
