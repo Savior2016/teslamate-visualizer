@@ -1376,7 +1376,7 @@
     const itemsR = [
       { k: 'uncharged', name: '本次未充', pct: cyc ? Number(cyc.uncharged_pct) : null, hatch: true },
       { k: 'idle', name: '驻车耗电', pct: cyc ? Number(cyc.idle_pct) : null, color: 'var(--cat-idle)' },
-      { k: 'climate', name: '驻车空调', pct: cyc ? Number(cyc.climate_pct) : null, color: 'var(--series-4)' },
+      { k: 'climate', name: '驻车空调', pct: cyc ? Number(cyc.climate_pct) : null, color: 'var(--cat-climate)' },
       { k: 'sentry', name: '哨兵', pct: cyc ? Number(cyc.sentry_pct) : null, color: 'var(--cat-sentry)' },
       { k: 'drive', name: '行驶', pct: cyc ? Number(cyc.drive_pct) : null, color: 'var(--cat-drive)' },
       { k: 'remaining', name: cyc && !cyc.active ? '周期末剩余' : '当前剩余',

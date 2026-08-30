@@ -27,11 +27,12 @@
   --seq-blue-500: #256abf;
   --seq-blue-600: #184f95;
   --tile-track: rgba(11, 11, 11, 0.08);
-  /* 活动分类色(参考调色板):行驶=橙 充电=青 哨兵=品红 驻车耗电=中性灰 */
-  --cat-drive: #eb6834;
+  /* 活动分类色(参考调色板,黄/品红/绿/紫四色全配对校验通过):行驶=黄 充电=青 哨兵=品红 驻车空调=绿 驻车耗电=紫 */
+  --cat-drive: #eda100;
   --cat-charge: #1baf7a;
   --cat-sentry: #e87ba4;
-  --cat-idle: #6f6f6a;
+  --cat-climate: #008300;
+  --cat-idle: #4a3aa7;
   --success: #006300;
 }
 
@@ -55,10 +56,11 @@
   --seq-blue-500: #256abf;
   --seq-blue-600: #184f95;
   --tile-track: rgba(255, 255, 255, 0.10);
-  --cat-drive: #d95926;
+  --cat-drive: #c98500;
   --cat-charge: #199e70;
   --cat-sentry: #d55181;
-  --cat-idle: #a8a8a1;
+  --cat-climate: #008300;
+  --cat-idle: #9085e9;
   --success: #0ca30c;
 }
 
@@ -82,10 +84,11 @@
     --seq-blue-500: #256abf;
     --seq-blue-600: #184f95;
     --tile-track: rgba(255, 255, 255, 0.10);
-    --cat-drive: #d95926;
+    --cat-drive: #c98500;
     --cat-charge: #199e70;
     --cat-sentry: #d55181;
-    --cat-idle: #a8a8a1;
+    --cat-climate: #008300;
+    --cat-idle: #9085e9;
     --success: #0ca30c;
   }
 }
@@ -492,7 +495,7 @@ button { touch-action: manipulation; }
 .carring-remaining { stroke: var(--series-1); }
 .carring-drive { stroke: var(--cat-drive); }
 .carring-sentry { stroke: var(--cat-sentry); }
-.carring-climate { stroke: var(--series-4); }
+.carring-climate { stroke: var(--cat-climate); }
 .carring-idle { stroke: var(--cat-idle); }
 
 /* 分段点选联动:未选中的环段压暗 */
@@ -956,7 +959,7 @@ button { touch-action: manipulation; }
 
 .day-donut .seg-sentry { stroke: var(--cat-sentry); }
 
-.day-donut .seg-climate { stroke: var(--series-4); }
+.day-donut .seg-climate { stroke: var(--cat-climate); }
 
 .day-donut .seg-idle { stroke: var(--cat-idle); }
 
