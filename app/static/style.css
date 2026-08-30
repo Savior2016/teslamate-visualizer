@@ -358,7 +358,7 @@ button { touch-action: manipulation; }
   position: relative;
   flex: 1 1 auto;
   min-width: 0;
-  height: 560px;
+  height: 500px;
 }
 
 .car-svg {
@@ -666,43 +666,42 @@ button { touch-action: manipulation; }
 .cyc-chip.on { border-color: var(--series-1); }
 .cyc-chip.on b { color: var(--text-primary); }
 
-/* 四轮面板:标签 + 当前胎压 + 迷你平滑填充曲线(车头朝上:前轮在上) */
+/* 四轮胎压:车图下方独立一行(不覆盖俯视图),当前值 + 迷你平滑曲线,只看最近 24 小时 */
+.wheels-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-top: 12px;
+}
+
 .wheel {
-  position: absolute;
-  z-index: 2;
-  width: 118px;
+  min-width: 0;
   background: var(--page);
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 6px 8px 4px;
+  padding: 5px 7px 3px;
 }
-
-/* 车头朝上:前轮毂在上、后轮毂在下;水平位置贴着车身(以中心线偏移) */
-.wheel-fl { left: max(6px, calc(50% - 262px)); top: 118px; }
-.wheel-fr { right: max(6px, calc(50% - 262px)); top: 118px; }
-.wheel-rl { left: max(6px, calc(50% - 262px)); bottom: 92px; }
-.wheel-rr { right: max(6px, calc(50% - 262px)); bottom: 92px; }
 
 .wheel-head {
   display: flex;
   align-items: baseline;
   justify-content: center;
-  gap: 4px;
-  font-size: 11px;
+  gap: 3px;
+  font-size: 10.5px;
   color: var(--text-muted);
   white-space: nowrap;
 }
 
 .wheel-head b {
-  font-size: 15px;
+  font-size: 13.5px;
   font-weight: 650;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
 }
 
-.wheel-unit { font-size: 10px; }
+.wheel-unit { font-size: 9.5px; }
 
-.wheel-chart { width: 100%; height: 44px; }
+.wheel-chart { width: 100%; height: 28px; }
 
 /* 电池健康(独立模块) */
 
@@ -1391,11 +1390,7 @@ footer a { color: var(--text-muted); }
   /* 车辆总览:窄屏仍保持左右两列夹车辆的布局,只收窄列宽与间距 */
   .carview { gap: 10px; }
   .car-legend { flex: 0 0 150px; gap: 8px; }
-  .car-stage { height: 480px; }
-  .wheel-fl, .wheel-rl { left: max(4px, calc(50% - 222px)); }
-  .wheel-fr, .wheel-rr { right: max(4px, calc(50% - 222px)); }
-  .wheel-fl, .wheel-fr { top: 102px; }
-  .wheel-rl, .wheel-rr { bottom: 80px; }
+  .car-stage { height: 440px; }
   /* 事件列表:窄屏改为 时间列 + 数值格 2×2(自带小标签),详情独占一行 */
   .ev-head { display: none; }
   .ev-row {
@@ -1467,8 +1462,9 @@ footer a { color: var(--text-muted); }
   .chip-legend { gap: 10px; }
   .mini-stat { padding: 5px 10px; }
 
-  /* 车辆总览:手机端仍两列夹车辆;舞台按车图比例伸缩,轮子面板收窄贴舞台四角;
-     车图内容整体放大 1.32 倍(裁掉 HUD 角标与四周留白),让车在框内占比更大 */
+  /* 车辆总览:手机端仍两列夹车辆;舞台按车图比例伸缩;
+     车图内容整体放大 1.32 倍(裁掉 HUD 角标与四周留白),让车在框内占比更大;
+     胎压面板在车图下方一行四格,不再覆盖车身 */
   .carview { gap: 6px; }
   .car-legend { flex: 0 0 88px; gap: 7px; }
   .car-stage { height: auto; aspect-ratio: 340 / 470; overflow: hidden; }
@@ -1478,13 +1474,9 @@ footer a { color: var(--text-muted); }
     transform-origin: 170px 236px;
     transform-box: view-box;
   }
-  .wheel { width: 60px; padding: 4px 5px 3px; }
-  .wheel-head b { font-size: 13.5px; }
-  .wheel-fl { left: 0; top: 6px; }
-  .wheel-fr { right: 0; top: 6px; }
-  .wheel-rl { left: 0; bottom: 6px; }
-  .wheel-rr { right: 0; bottom: 6px; }
-  .wheel-chart { height: 30px; }
+  .wheels-row { gap: 6px; margin-top: 8px; }
+  .wheel { padding: 4px 4px 2px; }
+  .wheel-chart { height: 24px; }
   .cl-item { padding: 7px 8px; gap: 7px; }
   .cl-val { font-size: 15px; }
 

@@ -24,6 +24,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from psycopg.rows import dict_row
+from psycopg.types.json import Jsonb
 from psycopg_pool import ConnectionPool
 from pydantic import BaseModel
 
@@ -128,68 +129,119 @@ DEFAULT_KWH_PER_IDEAL_KM = 0.145
 # 由「充电量 ÷ 表显电量增幅」自校准,含充电损耗,与电费口径一致。
 DEFAULT_KWH_PER_PCT = 0.75
 
-# 用户录入的充电费用(按充电会话 id),存 JSON 文件;挂载卷持久化
-COST_FILE = os.environ.get("COST_FILE", "/data/charge_costs.json")
-_cost_lock = threading.Lock()
+# 用户手填数据(充电费用 / 桩端总耗电 / 充电桩信息)统一存数据库 panel_manual 表:
+# kind = 'cost' | 'charge_extra' | 'charger',key = 充电会话 id / 地点键(addr_<id>/geo_<id>),
+# payload = jsonb。随数据库备份走,不再依赖 /data 下的 JSON 文件。
+PANEL_MANUAL_DDL = """
+CREATE TABLE IF NOT EXISTS panel_manual (
+  kind       text        NOT NULL,
+  key        text        NOT NULL,
+  payload    jsonb       NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (kind, key)
+)
+"""
 
-# 「充电详情」模块的用户补充数据:
-# charges  → {charge_id: {"total_kwh": 桩端计费总耗电(含损耗),手填}}
-# chargers → {位置键 addr_<address_id>/geo_<geofence_id>: {"name", "location"}},
-#            同一地点的充电自动带出上次填写的充电桩信息
+# 旧版 JSON 文件路径,仅作启动时一次性迁移的来源
+COST_FILE = os.environ.get("COST_FILE", "/data/charge_costs.json")
 EXTRAS_FILE = os.environ.get("EXTRAS_FILE", "/data/charge_extras.json")
-_extras_lock = threading.Lock()
 
 pool: ConnectionPool | None = None
 
 
+def _exec(sql: str, params: tuple = ()) -> None:
+    """写库(手填数据入库),显式提交。"""
+    assert pool is not None
+    with pool.connection() as conn:
+        conn.execute(sql, params)
+        conn.commit()
+
+
+def _manual_all(kind: str) -> dict[str, dict]:
+    rows = q("SELECT key, payload FROM panel_manual WHERE kind = %s", (kind,))
+    return {str(r["key"]): (r["payload"] or {}) for r in rows}
+
+
 def _load_costs() -> dict[str, float]:
-    """读取用户录入的充电费用 {charge_id: 元},文件缺失/损坏时返回空。"""
-    try:
-        with open(COST_FILE, encoding="utf-8") as f:
-            data = json.load(f)
-        return {str(k): float(v) for k, v in (data or {}).items()}
-    except (OSError, ValueError, TypeError):
-        return {}
+    """用户录入的充电费用 {charge_id: 元}。"""
+    out: dict[str, float] = {}
+    for k, v in _manual_all("cost").items():
+        try:
+            out[k] = float(v["cost"])
+        except (KeyError, TypeError, ValueError):
+            continue
+    return out
 
 
-def _save_cost(charge_id: int, cost: float) -> dict[str, float]:
-    """原子写入单条充电费用,返回最新全量表。"""
-    with _cost_lock:
-        costs = _load_costs()
-        costs[str(charge_id)] = round(float(cost), 2)
-        tmp = COST_FILE + ".tmp"
-        os.makedirs(os.path.dirname(COST_FILE) or ".", exist_ok=True)
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(costs, f, ensure_ascii=False)
-        os.replace(tmp, COST_FILE)
-    return costs
+def _save_cost(charge_id: int, cost: float) -> None:
+    _exec(
+        """
+        INSERT INTO panel_manual (kind, key, payload) VALUES ('cost', %s, %s)
+        ON CONFLICT (kind, key) DO UPDATE
+          SET payload = EXCLUDED.payload, updated_at = now()
+        """,
+        (str(charge_id), Jsonb({"cost": round(float(cost), 2)})),
+    )
 
 
 def _load_extras() -> dict:
-    """读取充电详情补充数据,文件缺失/损坏时返回空结构。"""
+    """充电详情补充数据:charges(桩端总耗电)+ chargers(按地点的桩信息)。"""
+    return {"charges": _manual_all("charge_extra"),
+            "chargers": _manual_all("charger")}
+
+
+def _save_charge_extra(charge_id: int, total_kwh: float | None) -> None:
+    """录入/清除某次充电的桩端计费总耗电;None = 删除。"""
+    if total_kwh is None:
+        _exec("DELETE FROM panel_manual WHERE kind = 'charge_extra' AND key = %s",
+              (str(charge_id),))
+    else:
+        _exec(
+            """
+            INSERT INTO panel_manual (kind, key, payload)
+            VALUES ('charge_extra', %s, %s)
+            ON CONFLICT (kind, key) DO UPDATE
+              SET payload = EXCLUDED.payload, updated_at = now()
+            """,
+            (str(charge_id), Jsonb({"total_kwh": round(float(total_kwh), 2)})),
+        )
+
+
+def _save_charger(key: str, entry: dict | None) -> None:
+    """按地点键存档充电桩信息;entry 为 None 表示删除。"""
+    if entry is None:
+        _exec("DELETE FROM panel_manual WHERE kind = 'charger' AND key = %s", (key,))
+    else:
+        _exec(
+            """
+            INSERT INTO panel_manual (kind, key, payload) VALUES ('charger', %s, %s)
+            ON CONFLICT (kind, key) DO UPDATE
+              SET payload = EXCLUDED.payload, updated_at = now()
+            """,
+            (key, Jsonb(entry)),
+        )
+
+
+def _migrate_manual_files(conn) -> None:
+    """旧版 JSON 文件里的手填数据一次性迁入 panel_manual(已有键不覆盖)。"""
+    ins = ("INSERT INTO panel_manual (kind, key, payload) VALUES (%s, %s, %s) "
+           "ON CONFLICT (kind, key) DO NOTHING")
+    try:
+        with open(COST_FILE, encoding="utf-8") as f:
+            for k, v in (json.load(f) or {}).items():
+                conn.execute(ins, ("cost", str(k),
+                                   Jsonb({"cost": round(float(v), 2)})))
+    except (OSError, ValueError, TypeError):
+        pass
     try:
         with open(EXTRAS_FILE, encoding="utf-8") as f:
             data = json.load(f)
-        if not isinstance(data, dict):
-            raise ValueError
-        return {
-            "charges": {str(k): v for k, v in (data.get("charges") or {}).items()
-                        if isinstance(v, dict)},
-            "chargers": {str(k): v for k, v in (data.get("chargers") or {}).items()
-                         if isinstance(v, dict)},
-        }
+        for kind, group in (("charge_extra", "charges"), ("charger", "chargers")):
+            for k, v in ((data or {}).get(group) or {}).items():
+                if isinstance(v, dict):
+                    conn.execute(ins, (kind, str(k), Jsonb(v)))
     except (OSError, ValueError, TypeError, AttributeError):
-        return {"charges": {}, "chargers": {}}
-
-
-def _save_extras(data: dict) -> None:
-    """原子写入充电详情补充数据。"""
-    with _extras_lock:
-        tmp = EXTRAS_FILE + ".tmp"
-        os.makedirs(os.path.dirname(EXTRAS_FILE) or ".", exist_ok=True)
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False)
-        os.replace(tmp, EXTRAS_FILE)
+        pass
 
 
 def _loc_key(address_id, geofence_id) -> str | None:
@@ -216,6 +268,9 @@ async def lifespan(_: FastAPI):
     )
     with pool.connection() as conn:
         conn.execute("SELECT 1")
+        conn.execute(PANEL_MANUAL_DDL)
+        _migrate_manual_files(conn)
+        conn.commit()
     yield
     pool.close()
 
@@ -746,15 +801,10 @@ def set_charging_extra(payload: ChargeExtraIn):
         raise HTTPException(status_code=404, detail="充电会话不存在")
     if payload.total_kwh is not None and not (0 <= payload.total_kwh <= 500):
         raise HTTPException(status_code=422, detail="总耗电需在 0–500 kWh 之间")
-    extras = _load_extras()
-    key = str(payload.charge_id)
-    if payload.total_kwh is None:
-        extras["charges"].pop(key, None)
-    else:
-        extras["charges"][key] = {"total_kwh": round(float(payload.total_kwh), 2)}
-    _save_extras(extras)
+    _save_charge_extra(payload.charge_id, payload.total_kwh)
     return {"ok": True, "charge_id": payload.charge_id,
-            "total_kwh": extras["charges"].get(key, {}).get("total_kwh")}
+            "total_kwh": (round(float(payload.total_kwh), 2)
+                          if payload.total_kwh is not None else None)}
 
 
 @app.post("/api/charging/charger")
@@ -772,17 +822,15 @@ def set_charger(payload: ChargerIn):
         raise HTTPException(status_code=422, detail="该次充电没有地点信息,无法存档")
     name = payload.name.strip()[:80]
     location = payload.location.strip()[:120]
-    extras = _load_extras()
-    entry = dict(extras["chargers"].get(key) or {})
+    entry = dict(_manual_all("charger").get(key) or {})
     entry["name"] = name
     entry["location"] = location
     if payload.brand is not None:
         entry["brand"] = payload.brand.strip()[:40]
     if entry.get("name") or entry.get("location") or entry.get("brand"):
-        extras["chargers"][key] = entry
+        _save_charger(key, entry)
     else:
-        extras["chargers"].pop(key, None)
-    _save_extras(extras)
+        _save_charger(key, None)
     return {"ok": True, "loc_key": key, "name": name, "location": location,
             "brand": entry.get("brand", "")}
 

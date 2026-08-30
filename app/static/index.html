@@ -58,15 +58,6 @@
     </div>
   </header>
 
-  <div class="filter-row">
-    <div class="seg" id="range-seg" role="group" aria-label="时间范围">
-      <button data-days="1">24 小时</button>
-      <button data-days="7" class="on">7 天</button>
-      <button data-days="30">30 天</button>
-    </div>
-    <span class="hint">数据源:TeslaMate · 每 60 秒自动刷新</span>
-  </div>
-
   <div class="grid">
     <div class="card col-12" id="car-card">
       <div class="card-head">
@@ -177,25 +168,28 @@
               <path class="car-body-line" d="M170 52 C196 52 218 62 232 84 C243 100 251 118 256 142 C261 168 263 190 261 210 C260 228 259 244 259 258 C259 288 261 316 261 334 C260 356 255 378 245 392 C233 408 205 418 170 418 C135 418 107 408 95 392 C85 378 80 356 79 334 C79 316 81 288 81 258 C81 244 80 228 79 210 C77 190 79 168 84 142 C89 118 97 100 108 84 C122 62 144 52 170 52 Z"/>
               </g>
             </svg>
-            <div class="wheel wheel-fl">
-              <div class="wheel-head"><b id="tpms-val-fl">—</b><span class="wheel-unit">bar</span></div>
-              <div class="wheel-chart" id="chart-wfl"></div>
-            </div>
-            <div class="wheel wheel-fr">
-              <div class="wheel-head"><b id="tpms-val-fr">—</b><span class="wheel-unit">bar</span></div>
-              <div class="wheel-chart" id="chart-wfr"></div>
-            </div>
-            <div class="wheel wheel-rl">
-              <div class="wheel-head"><b id="tpms-val-rl">—</b><span class="wheel-unit">bar</span></div>
-              <div class="wheel-chart" id="chart-wrl"></div>
-            </div>
-            <div class="wheel wheel-rr">
-              <div class="wheel-head"><b id="tpms-val-rr">—</b><span class="wheel-unit">bar</span></div>
-              <div class="wheel-chart" id="chart-wrr"></div>
-            </div>
           </div>
         </div>
         <div class="car-legend car-legend-r" id="car-legend-r"></div>
+      </div>
+      <!-- 四轮胎压:独立一行,不覆盖车身俯视图;只展示最近 24 小时 -->
+      <div class="wheels-row">
+        <div class="wheel wheel-fl">
+          <div class="wheel-head"><b id="tpms-val-fl">—</b><span class="wheel-unit">bar</span></div>
+          <div class="wheel-chart" id="chart-wfl"></div>
+        </div>
+        <div class="wheel wheel-fr">
+          <div class="wheel-head"><b id="tpms-val-fr">—</b><span class="wheel-unit">bar</span></div>
+          <div class="wheel-chart" id="chart-wfr"></div>
+        </div>
+        <div class="wheel wheel-rl">
+          <div class="wheel-head"><b id="tpms-val-rl">—</b><span class="wheel-unit">bar</span></div>
+          <div class="wheel-chart" id="chart-wrl"></div>
+        </div>
+        <div class="wheel wheel-rr">
+          <div class="wheel-head"><b id="tpms-val-rr">—</b><span class="wheel-unit">bar</span></div>
+          <div class="wheel-chart" id="chart-wrr"></div>
+        </div>
       </div>
     </div>
 
@@ -329,6 +323,15 @@
       </div>
       <div id="routes-list"></div>
     </div>
+  </div>
+
+  <div class="filter-row">
+    <div class="seg" id="range-seg" role="group" aria-label="时间范围">
+      <button data-days="1">24 小时</button>
+      <button data-days="7" class="on">7 天</button>
+      <button data-days="30">30 天</button>
+    </div>
+    <span class="hint">数据源:TeslaMate · 每 60 秒自动刷新</span>
   </div>
 
   <footer>

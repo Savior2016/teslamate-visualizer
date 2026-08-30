@@ -1342,13 +1342,14 @@
     fillCol('#car-legend-r', itemsR);
 
 
-    /* --- 四轮胎压:当前值 + 迷你平滑填充曲线;统一按与标准胎压 2.9 bar 的偏差着色 --- */
+    /* --- 四轮胎压:当前值 + 迷你平滑填充曲线(只看最近 24 小时);
+           统一按与标准胎压 2.9 bar 的偏差着色 --- */
     const TPMS_STD = 2.9;
     const tpmsColor = (v) => {
       const dev = Math.abs(v - TPMS_STD);
       return dev <= 0.15 ? '#3fae72' : dev <= 0.3 ? '#fab219' : '#d03b3b';
     };
-    const w = (o.tpms && o.tpms.wheels) || {};
+    const w = (o.tpms24 && o.tpms24.wheels) || {};
     const wheels = [['fl', 'wfl'], ['fr', 'wfr'], ['rl', 'wrl'], ['rr', 'wrr']];
     wheels.forEach(([key, cid]) => {
       const data = (w[key] || []).map((p) => [Number(p[0]), Number(p[1])]);
@@ -1932,7 +1933,7 @@
     try {
       const o = await api('overview');
       if (S.carId === null) S.carId = o.car_id;
-      const [daily, chg, routes, act, eff, tpms, sys, health, sessions, cyc, temp] = await Promise.all([
+      const [daily, chg, routes, act, eff, tpms, sys, health, sessions, cyc, temp, tpms24] = await Promise.all([
         api(`drives/daily?days=${S.days}`),
         api('charging/summary?limit=12'),
         api(`routes?days=${S.days}`),
@@ -1944,6 +1945,7 @@
         api(`charging/sessions?days=${S.days}`),
         api('energy/cycles?limit=10'),
         api(`temp/trend?days=${S.days}`),
+        api('tpms/trend?days=1'),
       ]);
       S.overview = {
         ...o,
@@ -1954,6 +1956,7 @@
         activity: act,
         efficiency: eff,
         tpms,
+        tpms24,
         temp,
       };
       S.health = health;
