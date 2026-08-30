@@ -965,8 +965,9 @@ button { touch-action: manipulation; }
 
 .day-group.open .day-donut { display: none; }
 
-/* 可折叠卡片(充电详情):头部整行可点,默认折叠 */
-.card.collapsible > .card-head { cursor: pointer; }
+/* 可折叠卡片(充电详情/停车费):头部整行可点,默认折叠;
+   子项垂直居中,缩略统计与箭头在同一水平线上 */
+.card.collapsible > .card-head { cursor: pointer; align-items: center; }
 
 .card-chev {
   color: var(--text-muted);
