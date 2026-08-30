@@ -701,6 +701,9 @@ button { touch-action: manipulation; }
 
 .wheel-unit { font-size: 9.5px; }
 
+/* 轮子位置标签(一排四格时需要标注是哪个轮子) */
+.wheel-pos { font-size: 10px; color: var(--text-muted); }
+
 .wheel-chart { width: 100%; height: 28px; }
 
 /* 电池健康(独立模块) */
