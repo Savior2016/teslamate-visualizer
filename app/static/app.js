@@ -300,21 +300,38 @@
   // 车型显示名:库中 model 为单字母;车主确认本车(Y / 74D 双电机)为 Model Y L
   const MODEL_LABEL = { S: 'Model S', '3': 'Model 3', X: 'Model X', Y: 'Model Y' };
   const TRIM_LABEL = { 'Y|74D': 'Model Y L' };
+  // 顶栏车图:特斯拉设计 studio compositor 渲染图,按车型切换(S/X 国内无 compositor,无图回退)
+  const MODEL_IMG = {
+    'Model Y L': '/model-y-l.png',
+    'Model Y': '/model-y.png',
+    'Model 3': '/model-3.png',
+  };
+
+  // 车型信息集中判定:显示名 + 是否 Y L(官方尾标徽章)+ 顶栏渲染图
+  function carModelInfo(car) {
+    const trimKey = car ? `${car.model}|${car.trim_badging || ''}` : '';
+    const label = TRIM_LABEL[trimKey] ||
+      (car ? (MODEL_LABEL[car.model] || car.model || '') : '');
+    return { label, isYL: label === 'Model Y L', img: MODEL_IMG[label] || null };
+  }
 
   function renderHeader() {
     const o = S.overview;
     if (!o) return;
     const car = o.cars.find((c) => c.id === S.carId) || o.cars[0];
     $('#car-name').textContent = car ? car.name : '—';
-    const trimKey = car ? `${car.model}|${car.trim_badging || ''}` : '';
-    const modelLabel = TRIM_LABEL[trimKey] ||
-      (car ? (MODEL_LABEL[car.model] || car.model || '') : '');
-    // Model Y L 展示官方尾标徽章(PNG 蒙版 + currentColor 随主题变色);其他车型回退为文字
-    const isYL = modelLabel === 'Model Y L';
-    $('#car-model-badge').hidden = !isYL;
+    const mi = carModelInfo(car);
+    // Model Y L 展示官方尾标徽章(PNG 蒙版 + currentColor 随主题变色);其他车型回退为字标文字
+    $('#car-model-badge').hidden = !mi.isYL;
     const modelText = $('#car-model-text');
-    modelText.hidden = isYL;
-    if (!isYL) modelText.textContent = modelLabel;
+    modelText.hidden = mi.isYL;
+    if (!mi.isYL) modelText.textContent = mi.label.toUpperCase();
+    // 顶栏车图跟随车型;无对应渲染图的车型隐藏
+    const icon = $('.model-icon');
+    if (icon) {
+      icon.style.display = mi.img ? '' : 'none';
+      if (mi.img && !icon.src.endsWith(mi.img)) { icon.src = mi.img; icon.alt = mi.label; }
+    }
     const badge = $('#state-badge');
     badge.dataset.state = o.state;
     $('#state-text').textContent = STATE_LABEL[o.state] || o.state;
@@ -1194,15 +1211,15 @@
         (usable === null ? 0 : Math.max(0, Math.min(100, usable)) / 100 * WW).toFixed(1));
     }
     $('#car-batt-val').textContent = usable === null ? '—' : `${fmtNum(usable, 0)}%`;
-    // 车型徽章:Model Y L 显示官方尾标图,其他车型回退文字
+    // 车型徽章:Model Y L 显示官方尾标图,其他车型回退字标文字
     const car0 = o.cars.find((c) => c.id === S.carId) || o.cars[0];
-    const isYL = !!car0 && TRIM_LABEL[`${car0.model}|${car0.trim_badging || ''}`] === 'Model Y L';
+    const cmi = carModelInfo(car0);
     const badgeImg = $('#car-badge');
-    if (badgeImg) badgeImg.style.display = isYL ? '' : 'none';
+    if (badgeImg) badgeImg.style.display = cmi.isYL ? '' : 'none';
     const cm = $('#car-center-model');
     if (cm) {
-      cm.style.display = isYL ? 'none' : '';
-      if (!isYL) cm.textContent = car0 ? (MODEL_LABEL[car0.model] || car0.model || '') : '';
+      cm.style.display = cmi.isYL ? 'none' : '';
+      if (!cmi.isYL) cm.textContent = cmi.label.toUpperCase();
     }
     const inT = lat && lat.inside_temp != null ? Number(lat.inside_temp) : null;
     const outT = lat && lat.outside_temp != null ? Number(lat.outside_temp) : null;

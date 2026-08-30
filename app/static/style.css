@@ -247,10 +247,12 @@ header h1:active { opacity: 0.55; }
   align-items: center;
 }
 
+#car-model-badge[hidden] { display: none; }
+
 #car-model-badge {
   display: block;
   height: 15px;
-  width: 134px; /* 徽章比例 926:104 */
+  width: 134px; /* 徽章比例 701:79 */
   background: currentColor;
   -webkit-mask: url('/model-yl-badge.png') center / contain no-repeat;
   mask: url('/model-yl-badge.png') center / contain no-repeat;
@@ -456,7 +458,15 @@ button { touch-action: manipulation; }
 /* 深色玻璃上的文字固定浅色 */
 .car-batt-val { fill: #fff; font-size: 14px; font-weight: 650; }
 .car-temp-val { fill: var(--series-1); font-size: 11px; font-weight: 600; }
-.car-center-model { fill: #f5f5f3; font-size: 16px; font-weight: 650; }
+.car-center-model { fill: #f5f5f3; font-size: 15px; font-weight: 600; letter-spacing: 3.5px; }
+
+/* 非 Y L 车型的字标文字:Tesla 字标风格(全大写 + 宽字距) */
+#car-model-text {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.3em;
+  color: var(--text-primary);
+}
 .car-center-temp { fill: var(--series-2); font-size: 12px; font-weight: 600; }
 
 /* 电池健康并入车辆总览:细分隔线 + 上下排列 */
