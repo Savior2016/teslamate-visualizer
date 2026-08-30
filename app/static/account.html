@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0d0d0d">
+  <title>个人中心 · TESLA Home</title>
+  <link rel="stylesheet" href="/style.css">
+  <script>document.documentElement.dataset.theme = localStorage.getItem('ttv-theme') || 'dark';</script>
+  <style>
+    .acct-wrap { max-width: 760px; }
+    .acct-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+    .acct-header h1 { font-size: 20px; margin: 0; font-weight: 600; }
+    .acct-back {
+      color: var(--text-secondary); text-decoration: none; font-size: 13px;
+      border: 1px solid var(--border); border-radius: 8px; padding: 5px 10px;
+    }
+    .acct-back:hover { color: var(--text-primary); border-color: var(--baseline); }
+    .acct-user-chip {
+      margin-left: auto; font-size: 12px; color: var(--text-secondary);
+      border: 1px solid var(--border); border-radius: 999px; padding: 4px 12px;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .acct-user-chip svg { width: 13px; height: 13px; fill: currentColor; }
+    .acct-wrap .card { margin-bottom: 14px; }
+
+    /* Tesla 授权状态横幅 */
+    .tesla-banner {
+      display: flex; align-items: center; gap: 10px; border-radius: 10px;
+      padding: 10px 14px; margin: 8px 0 14px; font-size: 14px; font-weight: 600;
+      border: 1px solid var(--border); background: var(--page);
+    }
+    .tesla-banner .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+    .tesla-banner.ok .dot { background: var(--success); box-shadow: 0 0 6px var(--success); }
+    .tesla-banner.ok { color: var(--success); }
+    .tesla-banner.pending .dot { background: var(--series-4); box-shadow: 0 0 6px var(--series-4); }
+    .tesla-banner.pending { color: var(--series-4); }
+    .tesla-banner small { font-weight: 400; color: var(--text-muted); margin-left: auto; text-align: right; }
+
+    /* 指引步骤 */
+    .steps { list-style: none; margin: 0; padding: 0; counter-reset: step; }
+    .steps > li {
+      position: relative; padding: 12px 12px 12px 46px; counter-increment: step;
+      border-left: 2px solid var(--gridline); margin-left: 13px;
+    }
+    .steps > li:last-child { border-left-color: transparent; }
+    .steps > li::before {
+      content: counter(step); position: absolute; left: -14px; top: 10px;
+      width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
+      font-size: 13px; font-weight: 600; background: var(--surface-1);
+      border: 2px solid var(--baseline); color: var(--text-muted);
+    }
+    .steps > li.done::before {
+      content: "✓"; border-color: var(--success); color: #fff;
+      background: var(--success);
+    }
+    .steps > li.done { border-left-color: var(--success); }
+    .steps > li.active::before { border-color: var(--series-1); color: var(--series-1); }
+    .steps h3 { margin: 0 0 4px; font-size: 14px; font-weight: 600; }
+    .steps .desc { font-size: 13px; color: var(--text-secondary); line-height: 1.7; }
+    .steps .desc code {
+      background: var(--page); border: 1px solid var(--border); border-radius: 5px;
+      padding: 1px 6px; font-size: 12px; word-break: break-all;
+    }
+    .steps .desc a { color: var(--series-1); }
+    .step-state { font-size: 12px; color: var(--success); font-weight: 600; }
+    .step-state.wait { color: var(--text-muted); font-weight: 400; }
+
+    /* 表单 */
+    .form-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+    .form-row input {
+      flex: 1 1 160px; min-width: 0; font: inherit; font-size: 14px;
+      color: var(--text-primary); background: var(--page);
+      border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px;
+    }
+    .form-row input:focus { outline: 2px solid var(--series-1); outline-offset: -1px; }
+    .btn {
+      font: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
+      color: #fff; background: var(--seq-blue-500); border: 0; border-radius: 8px;
+      padding: 8px 18px;
+    }
+    .btn:hover { background: var(--seq-blue-600); }
+    .btn.ghost {
+      color: var(--text-secondary); background: transparent;
+      border: 1px solid var(--border);
+    }
+    .btn.ghost:hover { color: var(--text-primary); border-color: var(--baseline); }
+    .btn.danger { background: transparent; color: #d03b3b; border: 1px solid currentColor; padding: 3px 10px; font-size: 12px; }
+    .form-msg { font-size: 13px; margin-top: 8px; min-height: 1.2em; }
+    .form-msg.err { color: #d03b3b; }
+    .form-msg.ok { color: var(--success); }
+
+    /* 账号列表 */
+    .user-list { margin: 6px 0 4px; padding: 0; list-style: none; }
+    .user-list li {
+      display: flex; align-items: center; gap: 10px; padding: 8px 2px;
+      border-bottom: 1px solid var(--gridline); font-size: 14px;
+    }
+    .user-list li:last-child { border-bottom: 0; }
+    .user-list .me-tag {
+      font-size: 11px; color: var(--series-1); border: 1px solid currentColor;
+      border-radius: 4px; padding: 0 5px;
+    }
+    .user-list .spacer { margin-left: auto; }
+
+    .sync-stats { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 10px; }
+    .sync-stats .stat { font-size: 12px; color: var(--text-muted); }
+    .sync-stats .stat b { display: block; font-size: 16px; color: var(--text-primary); font-weight: 600; }
+
+    @media (max-width: 600px) {
+      .acct-header h1 { font-size: 17px; }
+      .tesla-banner { flex-wrap: wrap; }
+      .tesla-banner small { margin-left: 0; width: 100%; text-align: left; }
+    }
+  </style>
+</head>
+<body>
+<div class="wrap acct-wrap">
+
+  <header class="acct-header">
+    <a class="acct-back" href="/">← 返回面板</a>
+    <h1>个人中心</h1>
+    <span class="acct-user-chip" id="acct-user">
+      <svg viewBox="0 0 24 24"><path d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5zm0 2c-4 0-8 2-8 5v3h16v-3c0-3-4-5-8-5z"/></svg>
+      <span id="acct-user-name">…</span>
+    </span>
+  </header>
+
+  <!-- Tesla 账号授权:状态 + 可视化指引 -->
+  <section class="card" id="card-tesla">
+    <h2>Tesla 账号授权</h2>
+    <div class="tesla-banner pending" id="tesla-banner">
+      <span class="dot"></span><span id="tesla-banner-text">检测中…</span>
+      <small id="tesla-banner-sub"></small>
+    </div>
+
+    <ol class="steps" id="guide-steps">
+      <li data-step="deployed">
+        <h3>部署一体化服务 <span class="step-state" data-state></span></h3>
+        <div class="desc">TeslaMate、数据库与 TESLA Home 面板已在运行(本页能打开即说明部署成功)。</div>
+      </li>
+      <li data-step="token">
+        <h3>获取 Tesla 令牌</h3>
+        <div class="desc">
+          TeslaMate 使用 Tesla 官方 API 令牌连接你的车辆。任选一种方式生成令牌
+          (用 Tesla 账号登录后,复制 <b>Access Token</b> 和 <b>Refresh Token</b>):
+          <br>📱 iPhone / Mac:App Store 安装「<b>Auth app for Tesla</b>」
+          <br>💻 Windows / macOS / Linux:GitHub 下载「<b>Tesla Auth</b>」
+          (<code>github.com/adriankumpf/tesla_auth</code>)
+          <br><span style="color:var(--text-muted)">令牌仅保存在你自己的服务器上(加密存储),不会上传到任何第三方。</span>
+        </div>
+      </li>
+      <li data-step="authorized">
+        <h3>在 TeslaMate 粘贴令牌 <span class="step-state" data-state></span></h3>
+        <div class="desc">
+          打开 <a id="teslamate-link" href="#" target="_blank" rel="noopener">TeslaMate 管理页</a>
+          (<code id="teslamate-url"></code>),在登录页粘贴两个令牌并保存。
+          <br><span style="color:var(--text-muted)">公网服务器上管理页默认只监听本机,请先在本地终端建立隧道再访问:
+          <code id="ssh-tunnel-cmd"></code>(局域网/家庭服务器可把 .env 的
+          <code>TESLAMATE_BIND</code> 改为 <code>0.0.0.0</code>)</span>
+        </div>
+      </li>
+      <li data-step="car">
+        <h3>识别车辆 <span class="step-state" data-state></span></h3>
+        <div class="desc" id="car-detect-desc">TeslaMate 会自动连接账号下的车辆,通常几秒内完成。</div>
+      </li>
+      <li data-step="synced">
+        <h3>数据同步 <span class="step-state" data-state></span></h3>
+        <div class="desc">行驶、充电、哨兵等数据将持续累积;回到面板即可查看可视化报表。</div>
+      </li>
+    </ol>
+
+    <div class="sync-stats" id="sync-stats" hidden>
+      <span class="stat"><b id="stat-positions">—</b>轨迹点</span>
+      <span class="stat"><b id="stat-drives">—</b>行程</span>
+      <span class="stat"><b id="stat-charges">—</b>充电</span>
+      <span class="stat"><b id="stat-last">—</b>最近数据</span>
+    </div>
+  </section>
+
+  <!-- 修改密码 -->
+  <section class="card">
+    <h2>修改密码</h2>
+    <div class="form-row">
+      <input type="password" id="pw-current" placeholder="当前密码" autocomplete="current-password">
+    </div>
+    <div class="form-row">
+      <input type="password" id="pw-new" placeholder="新密码(至少 6 位)" autocomplete="new-password">
+      <input type="password" id="pw-new2" placeholder="确认新密码" autocomplete="new-password">
+      <button class="btn" id="pw-submit">保存</button>
+    </div>
+    <div class="form-msg" id="pw-msg"></div>
+  </section>
+
+  <!-- 面板账号 -->
+  <section class="card">
+    <h2>面板账号</h2>
+    <ul class="user-list" id="user-list"></ul>
+    <div class="form-row">
+      <input type="text" id="nu-name" placeholder="新账号用户名" autocomplete="off" maxlength="32">
+      <input type="password" id="nu-pass" placeholder="密码(至少 6 位)" autocomplete="new-password">
+      <button class="btn ghost" id="nu-submit">添加账号</button>
+    </div>
+    <div class="form-msg" id="nu-msg"></div>
+  </section>
+
+</div>
+<script src="/account.js"></script>
+</body>
+</html>

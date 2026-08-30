@@ -6,6 +6,7 @@
 
 import base64
 import bisect
+import hashlib
 import json
 import os
 import re
@@ -37,17 +38,82 @@ DISPLAY_TZ = os.environ.get("DISPLAY_TZ", "Asia/Shanghai")
 if not re.fullmatch(r"[A-Za-z_0-9+/.-]{1,64}", DISPLAY_TZ):
     DISPLAY_TZ = "Asia/Shanghai"
 
-# HTTP Basic Auth(账号表为空则不启用)
-# 支持多账号:VISUALIZER_USERS="user1:pass1,user2:pass2"(密码可含冒号,取首个冒号分割)
-AUTH_USER = os.environ.get("VISUALIZER_USER", "")
-AUTH_PASS = os.environ.get("VISUALIZER_PASS", "")
-AUTH_USERS: dict[str, str] = {}
-for _part in os.environ.get("VISUALIZER_USERS", "").split(","):
-    _u, _sep, _p = _part.partition(":")
-    if _sep and _u.strip():
-        AUTH_USERS[_u.strip()] = _p
-if AUTH_USER and AUTH_PASS:
-    AUTH_USERS[AUTH_USER] = AUTH_PASS
+# HTTP Basic Auth:账号存 /data/users.json(pbkdf2_sha256 哈希),动态读取(mtime 缓存),
+# 个人中心改密码即刻生效、无需重启。
+# 首次启动时文件不存在,则用环境变量播种:VISUALIZER_USERS="user1:pass1,user2:pass2"
+# (密码可含冒号,取首个冒号分割);之后改动环境变量不再生效。
+USERS_FILE = os.environ.get("USERS_FILE", "/data/users.json")
+_users_lock = threading.Lock()
+_users_cache: tuple[float, dict[str, str]] | None = None  # (mtime, {user: 哈希串})
+
+
+def _hash_password(pw: str) -> str:
+    """pbkdf2_sha256(标准库实现):返回 'pbkdf2_sha256$迭代次数$salt_hex$hash_hex'。"""
+    iterations = 210_000
+    salt = secrets.token_hex(16)
+    dk = hashlib.pbkdf2_hmac("sha256", pw.encode("utf-8"), bytes.fromhex(salt), iterations)
+    return f"pbkdf2_sha256${iterations}${salt}${dk.hex()}"
+
+
+def _verify_password(pw: str, stored: str) -> bool:
+    try:
+        _algo, iters, salt, expect = stored.split("$", 3)
+        dk = hashlib.pbkdf2_hmac("sha256", pw.encode("utf-8"), bytes.fromhex(salt), int(iters))
+        return secrets.compare_digest(dk.hex(), expect)
+    except (ValueError, TypeError):
+        return False
+
+
+def _save_users(users: dict[str, str]) -> None:
+    """原子写入账号文件。"""
+    with _users_lock:
+        tmp = USERS_FILE + ".tmp"
+        os.makedirs(os.path.dirname(USERS_FILE) or ".", exist_ok=True)
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump({"users": users}, f, ensure_ascii=False, indent=1)
+        os.replace(tmp, USERS_FILE)
+
+
+def _seed_users() -> None:
+    """首次启动:账号文件不存在时从环境变量播种(已存在则跳过)。"""
+    if os.path.exists(USERS_FILE):
+        return
+    seeds: dict[str, str] = {}
+    for part in os.environ.get("VISUALIZER_USERS", "").split(","):
+        u, sep, p = part.partition(":")
+        if sep and u.strip() and p:
+            seeds[u.strip()] = _hash_password(p)
+    legacy_user = os.environ.get("VISUALIZER_USER", "")
+    legacy_pass = os.environ.get("VISUALIZER_PASS", "")
+    if legacy_user and legacy_pass:
+        seeds[legacy_user] = _hash_password(legacy_pass)
+    if seeds:
+        _save_users(seeds)
+
+
+def auth_users() -> dict[str, str]:
+    """动态读取账号表 {用户名: 哈希串};文件缺失/损坏时为空(不启用认证)。"""
+    global _users_cache
+    try:
+        mtime = os.path.getmtime(USERS_FILE)
+    except OSError:
+        return {}
+    if _users_cache and _users_cache[0] == mtime:
+        return _users_cache[1]
+    users: dict[str, str] = {}
+    try:
+        with open(USERS_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+        raw = data.get("users") if isinstance(data, dict) else None
+        if isinstance(raw, dict):
+            users = {str(k): str(v) for k, v in raw.items()}
+    except (OSError, ValueError, TypeError):
+        users = {}
+    _users_cache = (mtime, users)
+    return users
+
+
+_seed_users()
 
 # 登录失败限速:同一 IP 10 分钟内失败 10 次则锁定 5 分钟
 _failures: dict[str, list[float]] = defaultdict(list)
@@ -161,7 +227,8 @@ app.add_middleware(GZipMiddleware, minimum_size=1024)
 @app.middleware("http")
 async def auth_and_headers(request: Request, call_next):
     """HTTP Basic Auth + 基础安全响应头(健康检查与地图瓦片代理除外)。"""
-    if AUTH_USERS and request.url.path != "/api/health" \
+    users = auth_users()
+    if users and request.url.path != "/api/health" \
             and not request.url.path.startswith("/api/tiles/"):
         ip = request.client.host if request.client else "?"
         now = time.time()
@@ -176,14 +243,15 @@ async def auth_and_headers(request: Request, call_next):
                 user, pw = base64.b64decode(header[6:]).decode("utf-8").split(":", 1)
             except (ValueError, UnicodeDecodeError):
                 pass
-        expected = AUTH_USERS.get(user)
-        if expected is None or not secrets.compare_digest(pw, expected):
+        stored = users.get(user)
+        if stored is None or not _verify_password(pw, stored):
             _failures[ip].append(now)
             return JSONResponse(
                 {"detail": "需要认证"},
                 status_code=401,
                 headers={"WWW-Authenticate": 'Basic realm="TeslaMate Visualizer"'},
             )
+        request.state.user = user  # 供个人中心接口识别当前登录账号
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
@@ -1461,6 +1529,114 @@ def temp_trend(car_id: int | None = Query(default=None),
         if r["outside_temp"] is not None:
             outside.append([ts, float(r["outside_temp"])])
     return {"days": days, "step_seconds": step, "inside": inside, "outside": outside}
+
+
+# ---------- 个人中心 ----------
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str
+
+
+class UserAdd(BaseModel):
+    username: str
+    password: str
+
+
+@app.get("/api/account/status")
+def account_status(request: Request):
+    """个人中心:当前账号、账号列表、Tesla 授权/车辆/数据同步状态(指引步骤亮灯用)。
+
+    TeslaMate 把 Tesla API 令牌加密存于 private.tokens;各查询均容错,
+    全新部署(TeslaMate 尚未建表/无数据)时返回未就绪状态而非报错。
+    """
+    status: dict = {
+        "user": getattr(request.state, "user", ""),
+        "users": sorted(auth_users()),
+        "tesla": {"authorized": False, "token_updated_ts": None},
+        "cars": [],
+        "sync": {"last_data_ts": None, "positions": 0, "drives": 0, "charges": 0},
+    }
+    try:
+        row = q("SELECT count(*) AS n, max(updated_at) AS last "
+                "FROM private.tokens WHERE refresh IS NOT NULL")[0]
+        status["tesla"] = {
+            "authorized": int(row["n"]) > 0,
+            "token_updated_ts": _utc_ms(row["last"]) if row["last"] else None,
+        }
+    except Exception:  # noqa: BLE001 — 表可能尚未创建
+        pass
+    try:
+        status["cars"] = [
+            {"id": r["id"], "name": r["name"], "model": r["model"],
+             "trim": r["trim_badging"], "vin_tail": (r["vin"] or "")[-6:]}
+            for r in q("SELECT id, name, model, trim_badging, vin FROM cars ORDER BY id")
+        ]
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        row = q("SELECT max(date) AS last, count(*) AS n FROM positions")[0]
+        status["sync"]["last_data_ts"] = _utc_ms(row["last"]) if row["last"] else None
+        status["sync"]["positions"] = int(row["n"])
+        status["sync"]["drives"] = int(q("SELECT count(*) AS n FROM drives")[0]["n"])
+        status["sync"]["charges"] = int(
+            q("SELECT count(*) AS n FROM charging_processes")[0]["n"])
+    except Exception:  # noqa: BLE001
+        pass
+    status["steps"] = {
+        "deployed": True,
+        "authorized": status["tesla"]["authorized"],
+        "car_detected": bool(status["cars"]),
+        "synced": status["sync"]["positions"] > 0,
+    }
+    return status
+
+
+@app.post("/api/account/password")
+def change_password(body: PasswordChange, request: Request):
+    """修改当前登录账号的密码(需验证当前密码;写 users.json 即刻生效)。"""
+    user = getattr(request.state, "user", "")
+    users = auth_users()
+    if not user or user not in users:
+        raise HTTPException(status_code=401, detail="未登录")
+    if not _verify_password(body.current_password, users[user]):
+        raise HTTPException(status_code=403, detail="当前密码不正确")
+    if len(body.new_password) < 6:
+        raise HTTPException(status_code=400, detail="新密码至少 6 位")
+    fresh = dict(users)
+    fresh[user] = _hash_password(body.new_password)
+    _save_users(fresh)
+    return {"ok": True, "user": user}
+
+
+@app.post("/api/account/users")
+def add_user(body: UserAdd):
+    """新增面板账号(已登录用户均可添加)。"""
+    if not re.fullmatch(r"[A-Za-z0-9_.@-]{1,32}", body.username):
+        raise HTTPException(status_code=400, detail="用户名仅限字母数字与 _ . @ -,最长 32 位")
+    if len(body.password) < 6:
+        raise HTTPException(status_code=400, detail="密码至少 6 位")
+    users = dict(auth_users())
+    if body.username in users:
+        raise HTTPException(status_code=409, detail="账号已存在")
+    users[body.username] = _hash_password(body.password)
+    _save_users(users)
+    return {"ok": True, "users": sorted(users)}
+
+
+@app.delete("/api/account/users/{name}")
+def remove_user(name: str, request: Request):
+    """删除面板账号(不能删除当前登录账号,也不能删除最后一个账号)。"""
+    users = dict(auth_users())
+    if name not in users:
+        raise HTTPException(status_code=404, detail="账号不存在")
+    if name == getattr(request.state, "user", ""):
+        raise HTTPException(status_code=400, detail="不能删除当前登录的账号")
+    if len(users) <= 1:
+        raise HTTPException(status_code=400, detail="至少保留一个账号")
+    del users[name]
+    _save_users(users)
+    return {"ok": True, "users": sorted(users)}
 
 
 app.mount("/", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static"),

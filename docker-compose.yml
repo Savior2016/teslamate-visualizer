@@ -1,0 +1,131 @@
+# TESLA Home 一体化部署
+# 服务:TeslaMate 核心 + PostgreSQL + MQTT(Mosquitto)+ TESLA Home 面板
+# 可选(profile):grafana(TeslaMate 官方仪表盘)、https(Caddy 自动 HTTPS)
+#
+# 快速开始:./setup.sh   (生成 .env 并拉起全部服务)
+# 手动:cp .env.example .env 并填写后  docker compose up -d
+name: tesla-home
+
+services:
+  teslamate:
+    image: teslamate/teslamate:${TESLAMATE_VERSION:-4.0.1}
+    restart: always
+    depends_on:
+      database:
+        condition: service_healthy
+    environment:
+      # Tesla API 令牌加密密钥(.env 中配置,setup.sh 自动生成;迁移旧部署时必须沿用旧值)
+      - ENCRYPTION_KEY=${TESLAMATE_ENCRYPTION_KEY:?请在 .env 中设置 TESLAMATE_ENCRYPTION_KEY}
+      - DATABASE_USER=teslamate
+      - DATABASE_PASS=${POSTGRES_PASSWORD:?请在 .env 中设置 POSTGRES_PASSWORD}
+      - DATABASE_NAME=teslamate
+      - DATABASE_HOST=database
+      - MQTT_HOST=mosquitto
+      - TZ=${TZ:-Asia/Shanghai}
+    ports:
+      # TeslaMate 管理页:首次授权 Tesla 账号(粘贴令牌)时必须访问。
+      # 默认仅监听本机回环,公网服务器请用 SSH 隧道访问:
+      #   ssh -L 4000:127.0.0.1:4000 user@<服务器>
+      # 家庭服务器/局域网可在 .env 改 TESLAMATE_BIND=0.0.0.0
+      - "${TESLAMATE_BIND:-127.0.0.1}:4000:4000"
+    volumes:
+      - ./import:/opt/app/import
+    cap_drop:
+      - all
+
+  database:
+    image: postgres:${POSTGRES_VERSION:-18-trixie}
+    restart: always
+    environment:
+      - POSTGRES_USER=teslamate
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?请在 .env 中设置 POSTGRES_PASSWORD}
+      - POSTGRES_DB=teslamate
+    volumes:
+      - teslamate-db:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U teslamate -d teslamate"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  mosquitto:
+    image: eclipse-mosquitto:${MOSQUITTO_VERSION:-2}
+    restart: always
+    command: mosquitto -c /mosquitto-no-auth.conf
+    # 不对外暴露,仅容器网络内部使用
+    volumes:
+      - mosquitto-conf:/mosquitto/config
+      - mosquitto-data:/mosquitto/data
+
+  visualizer:
+    image: ${VISUALIZER_IMAGE:-ghcr.io/savior2016/teslamate-visualizer:latest}
+    container_name: teslamate-visualizer
+    restart: always
+    depends_on:
+      database:
+        condition: service_healthy
+    environment:
+      - DATABASE_HOST=database
+      - DATABASE_PORT=5432
+      - DATABASE_USER=teslamate
+      - DATABASE_PASS=${POSTGRES_PASSWORD:?请在 .env 中设置 POSTGRES_PASSWORD}
+      - DATABASE_NAME=teslamate
+      - DISPLAY_TZ=${TZ:-Asia/Shanghai}
+      # 首次启动时播种面板账号(写入 data/users.json 后不再读取;
+      # 之后请到面板右上角「个人中心」修改密码或新增账号)
+      - VISUALIZER_USERS=${PANEL_USERS:-}
+    ports:
+      # 面板主入口(自带登录认证)。配合 Caddy HTTPS 时可改 VISUALIZER_BIND=127.0.0.1
+      - "${VISUALIZER_BIND:-0.0.0.0}:8080:8080"
+    volumes:
+      # 面板用户数据:账号(users.json)、充电费用、充电桩信息、瓦片缓存
+      - ./data:/data
+
+  # 可选:TeslaMate 官方 Grafana 仪表盘,启用:docker compose --profile grafana up -d
+  grafana:
+    image: teslamate/grafana:${GRAFANA_VERSION:-latest}
+    profiles: ["grafana"]
+    restart: always
+    depends_on:
+      database:
+        condition: service_healthy
+    environment:
+      - DATABASE_USER=teslamate
+      - DATABASE_PASS=${POSTGRES_PASSWORD:?请在 .env 中设置 POSTGRES_PASSWORD}
+      - DATABASE_NAME=teslamate
+      - DATABASE_HOST=database
+    ports:
+      - "${GRAFANA_BIND:-127.0.0.1}:3000:3000"
+    volumes:
+      - teslamate-grafana-data:/var/lib/grafana
+
+  # 可选:Caddy 自动 HTTPS(需要域名已解析到本机且 80/443 放行)。
+  # 复制 Caddyfile.example 为 Caddyfile 并改域名后:docker compose --profile https up -d
+  # 认证由面板应用层完成,Caddy 只负责 TLS 终结。
+  caddy:
+    image: caddy:${CADDY_VERSION:-2-alpine}
+    profiles: ["https"]
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  # 卷名固定,与旧版分立部署(teslamate / teslamate-visualizer 两个项目)保持一致,
+  # 迁移时直接复用原有数据,无需导入导出
+  teslamate-db:
+    name: teslamate_teslamate-db
+  teslamate-grafana-data:
+    name: teslamate_teslamate-grafana-data
+  mosquitto-conf:
+    name: teslamate_mosquitto-conf
+  mosquitto-data:
+    name: teslamate_mosquitto-data
+  caddy_data:
+    name: teslamate-visualizer_caddy_data
+  caddy_config:
+    name: teslamate-visualizer_caddy_config

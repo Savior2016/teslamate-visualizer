@@ -1,0 +1,6 @@
+# 开发模式:面板从本地源码构建,而不是拉取 ghcr.io 预构建镜像
+# 用法:docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+services:
+  visualizer:
+    build: .
+    image: teslamate-visualizer:dev

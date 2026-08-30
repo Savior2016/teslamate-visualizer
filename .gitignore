@@ -7,9 +7,12 @@
 data/
 
 # 真实部署配置(含密码/哈希,仅保留示例文件)
-docker-compose.yml
+# 注:docker-compose.yml 为一体化编排(密钥全部走 .env),需要提交
 docker-compose.override.yml
 Caddyfile
+
+# TeslaMate 数据导入目录
+import/
 
 # Python
 __pycache__/
