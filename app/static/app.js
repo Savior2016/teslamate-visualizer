@@ -766,6 +766,73 @@
     return S.overview ? (S.overview.kwhPerIdealKm || 0) : 0;
   }
 
+  /* 折叠日组右侧的小型环状耗电图:按 行驶/哨兵/驻车空调/驻车耗电 的 kWh 占比分段 */
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  const DRAIN_SEGS = [
+    ['drive', '行驶'], ['sentry', '哨兵'], ['climate', '驻车空调'], ['idle', '驻车耗电'],
+  ];
+
+  function eventDrainKwh(ev) {
+    const m = ev.meta;
+    if (ev.kind !== 'drive' && ev.kind !== 'sentry' && ev.kind !== 'idle') return null;
+    if (m.energy_kwh !== null && m.energy_kwh !== undefined) return Math.max(0, Number(m.energy_kwh));
+    // 缺少能耗字段时按电量%降幅折算(与列表数值列同口径)
+    const drop = ev.kind === 'drive'
+      ? (m.start_battery_level !== null && m.start_battery_level !== undefined &&
+          m.end_battery_level !== null && m.end_battery_level !== undefined)
+        ? Number(m.start_battery_level) - Number(m.end_battery_level) : 0
+      : -Number(m.delta || 0);
+    const kwh = kwhAtPct(Math.max(0, drop));
+    return kwh === null ? null : kwh;
+  }
+
+  function dayDrainDonut(evs) {
+    const drain = { drive: 0, sentry: 0, climate: 0, idle: 0 };
+    evs.forEach((ev) => {
+      const kwh = eventDrainKwh(ev);
+      if (kwh === null || kwh <= 0) return;
+      const k = (ev.kind === 'idle' && ev.meta.kind === 'climate') ? 'climate' : ev.kind;
+      drain[k] += kwh;
+    });
+    const total = DRAIN_SEGS.reduce((s, [k]) => s + drain[k], 0);
+
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 36 36');
+    svg.setAttribute('class', 'day-donut');
+    const mk = (cls) => {
+      const c = document.createElementNS(SVG_NS, 'circle');
+      c.setAttribute('cx', '18');
+      c.setAttribute('cy', '18');
+      c.setAttribute('r', '14');
+      c.setAttribute('pathLength', '100');
+      c.setAttribute('class', cls);
+      return c;
+    };
+    svg.appendChild(mk('donut-track'));
+
+    const tip = [];
+    if (total > 0) {
+      let acc = 0;
+      DRAIN_SEGS.forEach(([k, label]) => {
+        const v = drain[k];
+        if (v <= 0) return;
+        const len = v / total * 100;
+        const seg = mk('donut-seg seg-' + k);
+        // pathLength=100 归一化:dashoffset 25 处为环顶,段间留 1% 缝
+        const shown = len >= 99 ? 100 : Math.max(len - 1, 0.6);
+        seg.setAttribute('stroke-dasharray', `${shown} ${100 - shown}`);
+        seg.setAttribute('stroke-dashoffset', String(25 - acc));
+        svg.appendChild(seg);
+        acc += len;
+        tip.push(`${label} ${fmtNum(v, 1)} kWh`);
+      });
+    }
+    const t = document.createElementNS(SVG_NS, 'title');
+    t.textContent = tip.length ? tip.join(' · ') : '当日无耗电记录';
+    svg.appendChild(t);
+    return svg;
+  }
+
   function renderEvents() {
     const o = S.overview;
     const box = $('#events-list');
@@ -799,6 +866,7 @@
           `${CAT[k].label} ${n}`));
       });
       head.appendChild(summary);
+      head.appendChild(dayDrainDonut(evs));
       head.appendChild(el('span', 'chev', '▾'));
       head.addEventListener('click', () => grp.classList.toggle('open'));
       grp.appendChild(head);
@@ -2077,6 +2145,19 @@
     document.addEventListener('click', (e) => {
       const b = e.target.closest('.batt-toggle button');
       if (b) setBattMode(b.dataset.mode);
+    });
+
+    // 充电详情:整卡可折叠,默认折叠,展开状态跨会话记忆
+    const csCard = $('#cs-card');
+    if (localStorage.getItem('ttv-cs-open') === '1') csCard.classList.add('open');
+    const csHead = $('#cs-head');
+    const csToggle = () => {
+      const open = csCard.classList.toggle('open');
+      localStorage.setItem('ttv-cs-open', open ? '1' : '0');
+    };
+    csHead.addEventListener('click', csToggle);
+    csHead.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); csToggle(); }
     });
 
     $('#events-toggle-btn').addEventListener('click', () => {

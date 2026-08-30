@@ -941,6 +941,41 @@ button { touch-action: manipulation; }
 
 .day-group.open .day-body { display: block; }
 
+/* 折叠日组头部右侧的小型环状耗电图(展开后隐藏,明细里已有逐条数值) */
+.day-donut {
+  width: 32px;
+  height: 32px;
+  flex: none;
+}
+
+.day-donut circle { fill: none; stroke-width: 5; }
+
+.day-donut .donut-track { stroke: var(--tile-track); }
+
+.day-donut .seg-drive { stroke: var(--cat-drive); }
+
+.day-donut .seg-sentry { stroke: var(--cat-sentry); }
+
+.day-donut .seg-climate { stroke: var(--series-4); }
+
+.day-donut .seg-idle { stroke: var(--cat-idle); }
+
+.day-group.open .day-donut { display: none; }
+
+/* 可折叠卡片(充电详情):头部整行可点,默认折叠 */
+.card.collapsible > .card-head { cursor: pointer; }
+
+.card-chev {
+  color: var(--text-muted);
+  transition: transform 0.2s ease;
+  align-self: center;
+  flex: none;
+}
+
+.card.collapsible.open .card-chev { transform: rotate(180deg); }
+
+#cs-card:not(.open) .cs-list { display: none; }
+
 .ev-row {
   display: grid;
   grid-template-columns: 150px 90px 1fr 66px 84px 76px 76px;
@@ -1492,7 +1527,8 @@ footer a { color: var(--text-muted); }
     margin-left: 0;
     justify-content: flex-start;
   }
-  .day-head .chev { order: 2; margin-left: auto; }
+  .day-head .day-donut { order: 1; margin-left: auto; width: 28px; height: 28px; }
+  .day-head .chev { order: 2; margin-left: 0; }
   .ev-row {
     grid-template-columns: 96px 1fr 1fr;
     padding: 8px 10px;
