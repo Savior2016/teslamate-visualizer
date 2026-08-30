@@ -424,6 +424,10 @@ def overview(car_id: int | None = Query(default=None)):
     local_now = datetime.now(ZoneInfo(DISPLAY_TZ))
     month_start_utc = local_now.replace(day=1, hour=0, minute=0, second=0, microsecond=0) \
         .astimezone(timezone.utc).replace(tzinfo=None)
+    # 本周一起算(展示时区),再换算为 UTC
+    week_start_utc = (local_now - timedelta(days=local_now.weekday())) \
+        .replace(hour=0, minute=0, second=0, microsecond=0) \
+        .astimezone(timezone.utc).replace(tzinfo=None)
     year_start_utc = local_now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0) \
         .astimezone(timezone.utc).replace(tzinfo=None)
     totals = q(
@@ -432,13 +436,14 @@ def overview(car_id: int | None = Query(default=None)):
           count(*) AS drives_total,
           coalesce(sum(distance) FILTER (WHERE start_date >= %s), 0) AS month_km,
           coalesce(sum(distance) FILTER (WHERE start_date >= %s), 0) AS year_km,
+          coalesce(sum(distance) FILTER (WHERE start_date >= %s), 0) AS week_km,
           coalesce(sum(start_ideal_range_km - end_ideal_range_km)
             FILTER (WHERE start_date >= %s
                      AND start_ideal_range_km IS NOT NULL
                      AND end_ideal_range_km IS NOT NULL), 0) AS month_ideal_delta_km
         FROM drives WHERE car_id = %s
         """,
-        (month_start_utc, year_start_utc, month_start_utc, cid),
+        (month_start_utc, year_start_utc, week_start_utc, month_start_utc, cid),
     )[0]
 
     chg = q(
@@ -472,6 +477,7 @@ def overview(car_id: int | None = Query(default=None)):
             "drives_total": int(totals["drives_total"]),
             "month_km": float(totals["month_km"] or 0),
             "year_km": float(totals["year_km"] or 0),
+            "week_km": float(totals["week_km"] or 0),
             "month_energy_kwh": float(totals["month_ideal_delta_km"] or 0) * ratio,
         },
         "charging": {

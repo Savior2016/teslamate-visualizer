@@ -1090,8 +1090,9 @@
     return { v: pct, unit: '%', dec: 0 };
   }
 
-  // 车身坐标系:viewBox 0 0 340 460,车头(上)=100% 满电端,车尾(下)=0%
-  const CARY = (p) => 436 - 4.12 * p;
+  // 玻璃顶坐标系:viewBox 0 0 340 460,玻璃顶前缘(y=162)=100% 满电端,后缘(y=384)=0%
+  const CARY = (p) => 384 - 2.22 * p;
+  const GLASS_TOP = 162;
 
   // 分段点选:车身分带 ⇄ 图例详情 联动高亮(再点一次或点空白处取消)
   let carSel = null;
@@ -1100,7 +1101,7 @@
     document.querySelectorAll('.car-svg rect[id^="carfill-"]').forEach((r) => {
       r.classList.toggle('dim', !!carSel && r.id !== `carfill-${carSel}`);
     });
-    document.querySelectorAll('.cl-item').forEach((d) =>
+    document.querySelectorAll('.cl-item[data-k]').forEach((d) =>
       d.classList.toggle('on', !!carSel && d.dataset.k === carSel));
     const cv = $('.carview');
     if (cv) cv.classList.toggle('has-sel', !!carSel);
@@ -1148,11 +1149,11 @@
     if (!cyc) {
       SEG_IDS.forEach((id) => {
         const r = $(id);
-        if (r) { r.setAttribute('y', 24); r.setAttribute('height', 0); }
+        if (r) { r.setAttribute('y', GLASS_TOP); r.setAttribute('height', 0); }
       });
       SEP_IDS.forEach((id) => {
         const l = $(id);
-        if (l) { l.setAttribute('y1', 24); l.setAttribute('y2', 24); }
+        if (l) { l.setAttribute('y1', GLASS_TOP); l.setAttribute('y2', GLASS_TOP); }
       });
     } else {
       // 车头侧斜纹 = 本次未充(100% − 充至电量);充入区各段按估算值归一化填满
@@ -1186,14 +1187,35 @@
       });
     }
 
-    /* --- 两侧图例:左列 未充/驻车耗电/驻车空调,右列 哨兵/行驶/剩余 --- */
+    /* --- 左列:里程统计(额定续航 / 总里程 / 本月里程 / 本周里程,仅展示) --- */
+    const lat = o.latest || null;
+    const t = o.totals || {};
+    const rated = lat && lat.rated_battery_range_km != null ? Number(lat.rated_battery_range_km) : null;
+    const odo = lat && lat.odometer != null ? Number(lat.odometer) : null;
+    const usable = lat && lat.usable_battery_level != null ? Number(lat.usable_battery_level) : null;
+    const statCol = $('#car-legend-l');
+    statCol.textContent = '';
+    [
+      { name: '额定续航', v: rated, sub: usable === null ? '' : `当前电量 ${fmtNum(usable, 0)}%` },
+      { name: '总里程', v: odo, sub: '' },
+      { name: '本月里程', v: t.month_km != null ? Number(t.month_km) : null, sub: '' },
+      { name: '本周里程', v: t.week_km != null ? Number(t.week_km) : null, sub: '' },
+    ].forEach((s) => {
+      const d = el('div', 'cl-item cl-stat');
+      const tx = el('div');
+      tx.appendChild(el('b', '', s.name));
+      tx.appendChild(el('span', 'cl-val', s.v === null ? '—' : `${fmtNum(s.v, 0)} km`));
+      if (s.sub) tx.appendChild(el('span', 'cl-sub', s.sub));
+      d.appendChild(tx);
+      statCol.appendChild(d);
+    });
+
+    /* --- 右列:全部电耗分段(未充/驻车耗电/驻车空调/哨兵/行驶/剩余,与车身分带点选联动) --- */
     const cap = cyc && cyc.cap_kwh ? Number(cyc.cap_kwh) : 84;
-    const itemsL = [
+    const itemsR = [
       { k: 'uncharged', name: '本次未充', pct: cyc ? Number(cyc.uncharged_pct) : null, hatch: true },
       { k: 'idle', name: '驻车耗电', pct: cyc ? Number(cyc.idle_pct) : null, color: 'var(--cat-idle)' },
       { k: 'climate', name: '驻车空调', pct: cyc ? Number(cyc.climate_pct) : null, color: 'var(--series-4)' },
-    ];
-    const itemsR = [
       { k: 'sentry', name: '哨兵', pct: cyc ? Number(cyc.sentry_pct) : null, color: 'var(--cat-sentry)' },
       { k: 'drive', name: '行驶', pct: cyc ? Number(cyc.drive_pct) : null, color: 'var(--cat-drive)' },
       { k: 'remaining', name: cyc && !cyc.active ? '周期末剩余' : '当前剩余',
@@ -1224,7 +1246,6 @@
         box.appendChild(d);
       });
     };
-    fillCol('#car-legend-l', itemsL);
     fillCol('#car-legend-r', itemsR);
 
 
@@ -2138,7 +2159,7 @@
     document.querySelectorAll('.car-legend').forEach((box) =>
       box.addEventListener('click', (e) => {
         const d = e.target.closest('.cl-item');
-        if (!d) return;
+        if (!d || !d.dataset.k) return;  // 里程统计项不参与点选
         setCarSel(carSel === d.dataset.k ? null : d.dataset.k);
       }));
 

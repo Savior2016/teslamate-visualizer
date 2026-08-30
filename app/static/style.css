@@ -317,7 +317,7 @@ header h1:active { opacity: 0.55; }
 /* 移动端:按钮禁用双击缩放,保证点按即时响应 */
 button { touch-action: manipulation; }
 
-/* ===== 车辆总览:纵向俯视图 + 两侧图例 + 四轮胎压 ===== */
+/* ===== 车辆总览:Model Y 俯视图(玻璃顶=能量显示区)+ 两侧图例 + 四轮胎压 ===== */
 .carview {
   display: flex;
   flex-wrap: wrap;
@@ -341,6 +341,29 @@ button { touch-action: manipulation; }
 }
 
 .car-body-base { fill: var(--tile-track); }
+
+/* 玻璃区域(挡风玻璃 / 全景玻璃顶):两种主题下都是深色玻璃 */
+.car-glazing, .car-glass-base { fill: #12161d; }
+
+.car-glass-line {
+  fill: none;
+  stroke: var(--baseline);
+  stroke-width: 1.5;
+  opacity: 0.55;
+}
+
+.car-mirror { fill: var(--tile-track); stroke: var(--baseline); stroke-width: 1.2; }
+
+/* 车头微光:白色低透明度罩层,两种主题下都只是一点光泽 */
+.car-sheen { fill: #fff; opacity: 0.05; }
+
+/* 机盖 / 尾门缝线 */
+.car-seam {
+  fill: none;
+  stroke: var(--baseline);
+  stroke-width: 1.2;
+  opacity: 0.35;
+}
 
 /* 能量占比分带:车头(上)为满电端,纯色填充不带阴影 */
 .carfill-remaining { fill: var(--series-1); }
@@ -387,13 +410,13 @@ button { touch-action: manipulation; }
   fill: none;
   stroke: var(--text-muted);
   stroke-width: 1.2;
-  opacity: 0.6;
+  opacity: 0.8;
 }
 
 .car-gauge-label {
   fill: var(--text-muted);
   font-size: 9px;
-  opacity: 0.8;
+  opacity: 0.95;
 }
 
 .car-tire { fill: var(--baseline); opacity: 0.85; }
@@ -401,11 +424,11 @@ button { touch-action: manipulation; }
 .car-body-line {
   fill: none;
   stroke: var(--baseline);
-  stroke-width: 2.5;
-  stroke-linejoin: miter;
+  stroke-width: 2;
+  stroke-linejoin: round;
 }
 
-/* 两侧图例:左列 未充/驻车耗电/驻车空调,右列 哨兵/行驶/剩余 */
+/* 两侧图例:左列里程统计(不可点选),右列全部电耗分段 */
 .car-legend {
   flex: 0 0 178px;
   display: flex;
@@ -426,13 +449,16 @@ button { touch-action: manipulation; }
   transition: border-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
 }
 
-/* 点选高亮:选中项描边发光,其余项压暗 */
+/* 里程统计项:仅展示,不参与点选联动 */
+.cl-item.cl-stat { cursor: default; }
+
+/* 点选高亮:选中项描边发光,其余项压暗(统计项不参与) */
 .cl-item.on {
   border-color: var(--cl-c, var(--baseline));
   box-shadow: 0 0 0 1px var(--cl-c, var(--baseline));
 }
 
-.carview.has-sel .cl-item:not(.on) { opacity: 0.55; }
+.carview.has-sel .cl-item[data-k]:not(.on) { opacity: 0.55; }
 
 .cl-dot {
   flex: none;
