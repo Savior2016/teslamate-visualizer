@@ -136,20 +136,6 @@
 
   /* ---------- 电量 / 里程 切换 ---------- */
 
-  function battToggleEl() {
-    const seg = el('div', 'seg mini batt-toggle');
-    seg.setAttribute('role', 'group');
-    seg.setAttribute('aria-label', '电量/里程切换');
-    ['pct', 'km'].forEach((m) => {
-      const b = el('button', m === S.battMode ? 'on' : '');
-      b.type = 'button';
-      b.dataset.mode = m;
-      b.textContent = m === 'pct' ? '电量 %' : '里程 km';
-      seg.appendChild(b);
-    });
-    return seg;
-  }
-
   function setBattMode(mode) {
     if (mode !== 'pct' && mode !== 'km') return;
     S.battMode = mode;
@@ -157,7 +143,7 @@
     document.querySelectorAll('.batt-toggle button').forEach((b) =>
       b.classList.toggle('on', b.dataset.mode === mode));
     // 仅重绘电量相关视图(避免地图 fitBounds 被重置)
-    renderHeader(); renderKpis(); renderTrends(); renderActivity(); renderSentry();
+    renderHeader(); renderActivity(); renderSentry();
   }
 
   function chartTheme() {
@@ -221,63 +207,6 @@
         formatter: (v) => (days <= 1 ? fmtClock(v) : `${fmtTime(v).slice(0, 5)}`),
       },
     });
-  }
-
-  /* ---------- 渲染:KPI ---------- */
-
-  function renderKpis() {
-    const o = S.overview;
-    const box = $('#kpis');
-    box.textContent = '';
-    const lat = o && o.latest;
-    const t = o && o.totals;
-
-    function tile(label, value, unit, sub, meterPct, headRight) {
-      const d = el('div', 'tile');
-      const labRow = el('div', 'tile-head');
-      labRow.appendChild(el('div', 'label', label));
-      if (headRight) labRow.appendChild(headRight);
-      d.appendChild(labRow);
-      const vrow = el('div', 'value');
-      vrow.textContent = value === null || value === undefined || value === '—' ? '—' : value;
-      if (unit) vrow.appendChild(el('span', 'unit', unit));
-      d.appendChild(vrow);
-      if (sub) d.appendChild(el('div', 'sub', sub));
-      if (meterPct !== null && meterPct !== undefined) {
-        const m = el('div', 'meter' + (meterPct < 20 ? ' low' : '') + (meterPct < 10 ? ' critical' : ''));
-        const fill = el('i');
-        fill.style.width = Math.min(100, Math.max(0, meterPct)) + '%';
-        m.appendChild(fill);
-        d.appendChild(m);
-      }
-      return d;
-    }
-
-    const usable = lat ? Number(lat.usable_battery_level) : null;
-    const batt = lat ? Number(lat.battery_level) : null;
-    const rated = lat ? Number(lat.rated_battery_range_km) : null;
-    const odo = lat ? Number(lat.odometer) : null;
-    const outT = lat ? Number(lat.outside_temp) : null;
-    const inT = lat ? Number(lat.inside_temp) : null;
-
-    // 电量卡:主值可按电量 / 里程切换,副信息固定同时展示两者
-    const kmMode = S.battMode === 'km' && kmFull() !== null;
-    const battTileSub = (batt === null ? '—' : `仪表电量 ${fmtNum(batt, 0)}%`) +
-      (rated !== null ? ` · 额定续航 ${fmtNum(rated, 0)} km` : '');
-    box.appendChild(tile(kmMode ? '剩余里程' : '电量',
-      kmMode
-        ? (rated === null ? '—' : fmtNum(rated, 0))
-        : (usable === null ? '—' : fmtNum(usable, 0)),
-      kmMode ? (rated === null ? '' : 'km') : (usable === null ? '' : '%'),
-      battTileSub, usable, battToggleEl()));
-    box.appendChild(tile('额定续航', fmtNum(rated, 0), 'km',
-      '由车辆 API 上报', null));
-    box.appendChild(tile('总里程', fmtNum(odo, 0), 'km',
-      lat ? `最近数据 ${fmtTime(Number(lat.date_ts))}` : '暂无位置数据', null));
-    box.appendChild(tile('车外温度', fmtNum(outT, 1), '°C',
-      inT === null ? '' : `车内 ${fmtNum(inT, 1)} °C`, null));
-    box.appendChild(tile('本月里程', fmtNum(t ? t.month_km : 0, 1), 'km',
-      t ? `本月能耗约 ${fmtNum(t.month_energy_kwh, 0)} kWh · 累计 ${fmtNum(t.year_km, 0)} km` : '', null));
   }
 
   /* ---------- 渲染:顶栏状态 ---------- */
@@ -346,7 +275,7 @@
       usable === null ? 'unknown' : pct < 10 ? 'critical' : pct < 20 ? 'low' : 'ok';
   }
 
-  /* ---------- 渲染:趋势图 ---------- */
+  /* ---------- 渲染:折线系列公共构造 ---------- */
 
   function lineSeries(name, data, color) {
     return {
@@ -362,49 +291,6 @@
         backgroundColor: cssVar('--surface-1'), padding: [2, 5], borderRadius: 4,
       },
     };
-  }
-
-  function renderTrends() {
-    const o = S.overview;
-    if (!o || !charts.battery || !charts.range) return;
-    const battData = (o.trendBattery || [])
-      .filter((p) => p.battery_level !== null && p.battery_level !== undefined)
-      .map((p) => [Number(p.date_ts), p.battery_level]);
-    const ratedData = (o.trendRange || [])
-      .filter((p) => p.rated_battery_range_km !== null && p.rated_battery_range_km !== undefined)
-      .map((p) => [Number(p.date_ts), p.rated_battery_range_km]);
-
-    // 电量曲线:可按电量 / 里程维度查看(里程按满电额定续航折算)
-    const fullKm = kmFull();
-    const kmMode = S.battMode === 'km' && fullKm !== null;
-    const battSeries = kmMode
-      ? battData.map(([t, p]) => [t, kmAtPct(p)]).filter((p) => p[1] !== null)
-      : battData;
-    // 单序列图表:标题即命名,无需图例
-    const base = {
-      tooltip: tooltipAxis({ '仪表电量': '%', '剩余里程(折算)': 'km', '额定续航': 'km' },
-        (v) => fmtTime(v, true), dualBatt),
-      grid: trendGrid(24),
-    };
-
-    charts.battery.setOption(Object.assign({}, chartTheme(), base, {
-      xAxis: timeAxis(S.days),
-      yAxis: Object.assign(axisCommon(), {
-        type: 'value', min: 0,
-        max: kmMode ? Math.ceil(fullKm / 100) * 100 : 100,
-        axisLabel: { color: cssVar('--text-muted'), fontSize: 11,
-          formatter: kmMode ? '{value}' : '{value}%' },
-      }),
-      series: [lineSeries(kmMode ? '剩余里程(折算)' : '仪表电量', battSeries,
-        cssVar('--series-1'))],
-    }), { notMerge: true });
-
-    charts.range.setOption(Object.assign({}, chartTheme(), base, {
-      xAxis: timeAxis(S.days),
-      yAxis: Object.assign(axisCommon(), { type: 'value', min: 0,
-        axisLabel: { color: cssVar('--text-muted'), fontSize: 11, formatter: '{value}' } }),
-      series: [lineSeries('额定续航', ratedData, cssVar('--series-3'))],
-    }), { notMerge: true });
   }
 
   /* ---------- 渲染:每日里程 / 充电 ---------- */
@@ -1317,50 +1203,6 @@
     });
   }
 
-  /* ---------- 渲染:行程表 ---------- */
-
-  function renderTable() {
-    const o = S.overview;
-    if (!o) return;
-    const tbl = $('#drives-table');
-    tbl.textContent = '';
-    const rows = o.recentDrives || [];
-
-    const thead = el('thead');
-    const hr = el('tr');
-    ['出发时间', '起点', '终点', '距离', '时长', '均速', '最高速', '能耗', 'Δ理想续航']
-      .forEach((h, i) => hr.appendChild(el('th', i > 2 ? 'num' : '', h)));
-    thead.appendChild(hr);
-    tbl.appendChild(thead);
-
-    if (!rows.length) {
-      const td = el('td', 'empty', '暂无行程数据');
-      td.colSpan = 9;
-      const tr = el('tr'); tr.appendChild(td);
-      tbl.appendChild(tr);
-      return;
-    }
-
-    const tbody = el('tbody');
-    rows.forEach((r) => {
-      const tr = el('tr');
-      tr.appendChild(el('td', 'strong', fmtTime(Number(r.start_date_ts))));
-      tr.appendChild(el('td', '', r.start_name || r.start_city || '—'));
-      tr.appendChild(el('td', '', r.end_name || r.end_city || '—'));
-      tr.appendChild(el('td', 'num strong', fmtNum(r.distance, 1)));
-      tr.appendChild(el('td', 'num', r.duration_min ? `${fmtNum(r.duration_min, 0)} 分` : '—'));
-      const avg = r.duration_min && r.distance ? r.distance / (r.duration_min / 60) : null;
-      tr.appendChild(el('td', 'num', fmtNum(avg, 0)));
-      tr.appendChild(el('td', 'num', fmtNum(r.speed_max, 0)));
-      tr.appendChild(el('td', 'num', r.efficiency_wh_km === null || r.efficiency_wh_km === undefined
-        ? '—' : fmtNum(r.efficiency_wh_km, 0)));
-      tr.appendChild(el('td', 'num', r.ideal_delta_km === null || r.ideal_delta_km === undefined
-        ? '—' : fmtNum(r.ideal_delta_km, 1)));
-      tbody.appendChild(tr);
-    });
-    tbl.appendChild(tbody);
-  }
-
   /* ---------- 渲染:充电详情(卡片式,纵向布局,适配手机) ---------- */
 
   function fmtDur(min) {
@@ -1370,19 +1212,18 @@
     return `${Math.floor(m / 60)} 小时 ${fmtNum(m % 60, 0)} 分`;
   }
 
-  // 保存后定向刷新:sessions 必刷;费用变动还要同步旧费用表与活动事件的金额
+  // 保存后定向刷新:sessions 必刷;费用变动还要同步活动事件的金额(不重置地图视野)
   async function csRefresh(withCosts) {
     const reqs = [api(`charging/sessions?days=${S.days}`)];
-    if (withCosts) reqs.push(api('charging/costs?days=90'), api(`activity?days=${S.days}`));
-    const [sessions, costs, act] = await Promise.all(reqs);
+    if (withCosts) reqs.push(api(`activity?days=${S.days}`));
+    const [sessions, act] = await Promise.all(reqs);
     S.sessions = sessions;
     if (withCosts) {
-      S.overview.costs = costs;
       S.overview.activity = act;
     }
     renderSessions();
     renderChargers();
-    if (withCosts) { renderCosts(); renderEvents(); renderActivity(); }
+    if (withCosts) { renderEvents(); renderActivity(); }
   }
 
   async function csSave(path, body, inps, withCosts) {
@@ -1692,115 +1533,6 @@
     });
   }
 
-  /* ---------- 渲染:充电费用 ---------- */
-
-  async function saveChargeCost(id, cost, inp) {
-    try {
-      await fetchJSON('/api/charging/costs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ charge_id: id, cost }),
-      });
-      // 定向刷新:只重取费用与活动数据(避免地图 fitBounds 被重置)
-      const [costs, act] = await Promise.all([
-        api('charging/costs?days=90'),
-        api(`activity?days=${S.days}`),
-      ]);
-      S.overview.costs = costs;
-      S.overview.activity = act;
-      renderCosts();
-      renderEvents();
-      renderActivity();
-    } catch (err) {
-      console.error(err);
-      if (inp) {
-        inp.disabled = false;
-        inp.value = S.overview.costs.charges.find((c) => c.id === id)?.cost ?? '';
-        inp.title = '保存失败,请重试';
-      }
-    }
-  }
-
-  function renderCosts() {
-    const o = S.overview;
-    const tbl = $('#costs-table');
-    if (!o || !tbl || !o.costs) return;
-    tbl.textContent = '';
-    const charges = o.costs.charges || [];
-
-    // 概览统计
-    const stats = $('#cost-stats');
-    stats.textContent = '';
-    function stat(label, value, unit) {
-      const t = el('span', 'mini-stat');
-      t.appendChild(el('span', '', label + ' '));
-      t.appendChild(el('b', '', String(value)));
-      if (unit) t.appendChild(el('span', '', ' ' + unit));
-      stats.appendChild(t);
-    }
-    const paid = charges.filter((c) => c.cost !== null && c.cost !== undefined);
-    const totalCost = paid.reduce((s, c) => s + c.cost, 0);
-    const totalEnergy = paid.reduce((s, c) => s + (c.energy_kwh || 0), 0);
-    const a = o.activity || {};
-    let evCost = 0, evCount = 0;
-    (a.drives || []).forEach((d) => { if (d.cost_yuan != null) { evCost += d.cost_yuan; evCount++; } });
-    (a.sentry || []).forEach((p) => { if (p.cost_yuan != null) { evCost += p.cost_yuan; evCount++; } });
-    (a.idle || []).forEach((p) => { if (p.cost_yuan != null) { evCost += p.cost_yuan; evCount++; } });
-    stat('已填费用', `${paid.length}/${charges.length}`, '次');
-    stat('费用合计', fmtNum(totalCost, 2), '¥');
-    if (totalEnergy > 0) stat('加权单价', fmtNum(totalCost / totalEnergy, 2), '¥/kWh');
-    if (evCost > 0) stat(`${S.days} 天内耗电金额`, fmtNum(evCost, 2), '¥');
-    if (!charges.length) {
-      tbl.appendChild(el('div', 'empty', '暂无充电记录'));
-      return;
-    }
-
-    const thead = el('thead');
-    const hr = el('tr');
-    ['充电时间', '充电量', '起止电量', '时长', '地点', '费用(¥)', '单价(¥/kWh)',
-     '充电后行驶', '充电后电费', '充电后每公里'].forEach((h, i) =>
-       hr.appendChild(el('th', i > 0 && i < 5 ? '' : 'num', h)));
-    thead.appendChild(hr);
-    tbl.appendChild(thead);
-
-    const tbody = el('tbody');
-    charges.forEach((c) => {
-      const tr = el('tr');
-      tr.appendChild(el('td', 'strong', fmtTime(Number(c.start_ts), true)));
-      tr.appendChild(el('td', 'num', fmtNum(c.energy_kwh, 1)));
-      const lv = (c.start_battery_level !== null && c.end_battery_level !== null)
-        ? `${fmtNum(c.start_battery_level, 0)}% → ${fmtNum(c.end_battery_level, 0)}%` : '—';
-      tr.appendChild(el('td', 'num', lv));
-      tr.appendChild(el('td', 'num', c.duration_min ? `${fmtNum(c.duration_min, 0)} 分` : '—'));
-      tr.appendChild(el('td', '', c.address_name || '—'));
-      const tdCost = el('td', 'num');
-      const inp = el('input', 'cost-input');
-      inp.type = 'number';
-      inp.min = '0';
-      inp.step = '0.01';
-      inp.inputMode = 'decimal';
-      inp.placeholder = '未填';
-      if (c.cost !== null && c.cost !== undefined) inp.value = c.cost;
-      inp.addEventListener('change', () => {
-        const v = parseFloat(inp.value);
-        if (isNaN(v) || v < 0) {
-          inp.value = c.cost !== null && c.cost !== undefined ? c.cost : '';
-          return;
-        }
-        inp.disabled = true;
-        saveChargeCost(c.id, v, inp);
-      });
-      tdCost.appendChild(inp);
-      tr.appendChild(tdCost);
-      tr.appendChild(el('td', 'num strong', c.rate_yuan_kwh != null ? fmtNum(c.rate_yuan_kwh, 2) : '—'));
-      tr.appendChild(el('td', 'num', fmtNum(c.after_km, 1)));
-      tr.appendChild(el('td', 'num', c.after_cost_yuan != null ? fmtNum(c.after_cost_yuan, 2) : '—'));
-      tr.appendChild(el('td', 'num strong', c.after_per_km_yuan != null ? fmtNum(c.after_per_km_yuan, 2) : '—'));
-      tbody.appendChild(tr);
-    });
-    tbl.appendChild(tbody);
-  }
-
   /* ---------- 渲染:地图 ---------- */
 
   function initMap() {
@@ -2003,16 +1735,13 @@
     try {
       const o = await api('overview');
       if (S.carId === null) S.carId = o.car_id;
-      const [trend, daily, recent, chg, routes, act, eff, tpms, costs, sys, health, sessions, cyc] = await Promise.all([
-        api(`trend?days=${S.days}`),
+      const [daily, chg, routes, act, eff, tpms, sys, health, sessions, cyc] = await Promise.all([
         api(`drives/daily?days=${S.days}`),
-        api('drives/recent?limit=10'),
         api('charging/summary?limit=12'),
         api(`routes?days=${S.days}`),
         api(`activity?days=${S.days}`),
         api(`efficiency/trend?days=${S.days}`),
         api(`tpms/trend?days=${S.days}`),
-        api('charging/costs?days=90'),
         api('system'),
         api('battery/health'),
         api(`charging/sessions?days=${S.days}`),
@@ -2020,17 +1749,13 @@
       ]);
       S.overview = {
         ...o,
-        trendBattery: trend.battery,
-        trendRange: trend.range,
+        kwhPerIdealKm: o.kwh_per_ideal_km,
         dailyRows: daily.days_rows,
-        kwhPerIdealKm: recent.kwh_per_ideal_km,
-        recentDrives: recent.drives,
         chargingSessions: chg.sessions,
         routes,
         activity: act,
         efficiency: eff,
         tpms,
-        costs,
       };
       S.health = health;
       S.sessions = sessions;
@@ -2041,14 +1766,10 @@
       renderCar();
       renderSessions();
       renderChargers();
-      renderKpis();
-      renderTrends();
       renderDaily();
       renderCharging();
-      renderTable();
       renderRoutes();
       renderRoutesList();
-      renderCosts();
       renderActivity();
       renderEvents();
       renderSentry();
@@ -2063,9 +1784,9 @@
 
   function renderAll() {
     if (!S.overview) return;
-    renderHeader(); renderKpis(); renderTrends();
-    renderDaily(); renderCharging(); renderTable();
-    renderRoutes(); renderRoutesList(); renderCosts();
+    renderHeader();
+    renderDaily(); renderCharging();
+    renderRoutes(); renderRoutesList();
     renderActivity(); renderEvents(); renderSentry();
     renderEfficiency(); renderTpms(); renderCar(); renderSessions(); renderChargers();
   }
@@ -2074,8 +1795,6 @@
 
   function init() {
     applyTheme();
-    charts.battery = echarts.init($('#chart-battery'));
-    charts.range = echarts.init($('#chart-range'));
     charts.daily = echarts.init($('#chart-daily'));
     charts.charging = echarts.init($('#chart-charging'));
     charts.activity = echarts.init($('#chart-activity'));
