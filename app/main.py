@@ -1131,8 +1131,9 @@ def battery_health(car_id: int | None = Query(default=None)):
     """满电容量估算与电池健康度。
 
     每次充电:满电容量 ≈ 充电量 ÷ 表显电量增幅 × 100(口径含充电损耗,
-    只用于相对比较)。基准容量取全部估算的 90 分位(抗离群),当前容量取
-    最近 3 次的中位数,健康度 = 当前 ÷ 基准。
+    只用于相对比较)。基准 = 全部有效估算的最高值,真实值 = 最新一次充电
+    的估算值,健康度 = 最新 ÷ 最高。两道离群过滤(增幅 ≥10%、容量 30–150
+    kWh)必须保留:否则一次异常偏高的估算会永久抬高基准、压低健康度。
     """
     cid = get_car_id(car_id)
     rows = q(
@@ -1155,17 +1156,16 @@ def battery_health(car_id: int | None = Query(default=None)):
         if 30 <= cap <= 150:  # 合理区间过滤离群值
             points.append({"ts": int(r["start_date_ts"]), "kwh": round(cap, 1)})
     if not points:
-        return {"points": [], "current_kwh": None, "nominal_kwh": None,
-                "health_pct": None}
-    caps = sorted(p["kwh"] for p in points)
-    nominal = caps[min(len(caps) - 1, int(len(caps) * 0.9))]
-    recent = sorted(p["kwh"] for p in points[-3:])
-    current = recent[len(recent) // 2]
+        return {"current_kwh": None, "nominal_kwh": None, "health_pct": None,
+                "samples": 0, "last_ts": None}
+    nominal = max(p["kwh"] for p in points)
+    current = points[-1]["kwh"]
     return {
-        "points": points,
         "current_kwh": round(current, 1),
         "nominal_kwh": round(nominal, 1),
         "health_pct": round(min(100.0, current / nominal * 100), 1),
+        "samples": len(points),
+        "last_ts": points[-1]["ts"],
     }
 
 

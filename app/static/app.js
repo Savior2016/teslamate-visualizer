@@ -1202,6 +1202,28 @@
       statCol.appendChild(d);
     });
 
+    /* --- 电池健康(小模块,无曲线):基准=历史最高满电容量估算,当前=最新一次充电估算 --- */
+    const bh = S.health;
+    const bhItem = el('div', 'cl-item cl-stat');
+    const bhTx = el('div');
+    bhTx.appendChild(el('b', '', '电池健康'));
+    const bhHas = bh && bh.health_pct !== null && bh.health_pct !== undefined;
+    const bhVal = el('span', 'cl-val', bhHas ? `${fmtNum(bh.health_pct, 1)} %` : '—');
+    if (bhHas) {
+      bhVal.style.color =
+        bh.health_pct >= 97 ? '#3fae72' : bh.health_pct >= 90 ? '#fab219' : '#d03b3b';
+    }
+    bhTx.appendChild(bhVal);
+    bhTx.appendChild(el('span', 'cl-sub', bhHas
+      ? `估算 ${fmtNum(bh.current_kwh, 1)} / 基准 ${fmtNum(bh.nominal_kwh, 1)} kWh`
+      : '暂无充电数据'));
+    if (bhHas) {
+      bhTx.appendChild(el('span', 'cl-sub',
+        `最近充电 ${fmtTime(bh.last_ts)} · ${bh.samples} 次样本`));
+    }
+    bhItem.appendChild(bhTx);
+    statCol.appendChild(bhItem);
+
     /* --- 车身读数:车头总里程 / 前风挡电量横向填充 / 玻璃中央徽章+车内温度 / 后风挡车外温度 --- */
     $('#car-odo').textContent = odo === null ? '—' : `${fmtNum(odo, 0)} km`;
     const wr = $('#carfill-batt');
@@ -1312,55 +1334,6 @@
     };
     fillCol('#car-legend-r', itemsR);
 
-
-    /* --- 电池健康 --- */
-    const stats = $('#car-health-stats');
-    stats.textContent = '';
-    const h = S.health;
-    if (h && h.health_pct !== null && h.health_pct !== undefined) {
-      const mk = (label, value, unit) => {
-        const t = el('span', 'mini-stat');
-        t.appendChild(el('span', '', label + ' '));
-        t.appendChild(el('b', '', String(value)));
-        if (unit) t.appendChild(el('span', '', ' ' + unit));
-        return t;
-      };
-      stats.appendChild(mk('电池健康度', fmtNum(h.health_pct, 1), '%'));
-      stats.appendChild(mk('满电估算', fmtNum(h.current_kwh, 1), 'kWh'));
-    }
-    if (charts.health) {
-      const pts = (h && h.points ? h.points : []).map((p) => [Number(p.ts), p.kwh]);
-      charts.health.setOption(Object.assign({}, chartTheme(), {
-        animation: false,
-        tooltip: tooltipAxis({ '满电容量估算': 'kWh' }, (v) => fmtTime(v)),
-        grid: { left: 8, right: 14, top: 14, bottom: 4, containLabel: true },
-        xAxis: Object.assign(timeAxis(30), { min: 'dataMin', max: 'dataMax' }),
-        yAxis: Object.assign(axisCommon(), {
-          type: 'value', scale: true,
-          axisLabel: { color: cssVar('--text-muted'), fontSize: 11, formatter: '{value}' },
-        }),
-        series: [{
-          name: '满电容量估算', type: 'line', data: pts,
-          smooth: 0.3, symbolSize: 6,
-          lineStyle: { width: 2, color: cssVar('--series-3') },
-          itemStyle: { color: cssVar('--series-3') },
-          areaStyle: { color: cssVar('--series-3') + '1f' },
-          markLine: h && h.nominal_kwh ? {
-            silent: true, symbol: 'none',
-            data: [{ yAxis: h.nominal_kwh }],
-            lineStyle: { color: cssVar('--text-muted'), type: 'dashed', width: 1 },
-            label: {
-              formatter: `基准 ${fmtNum(h.nominal_kwh, 1)} kWh`,
-              color: cssVar('--text-muted'), fontSize: 10, position: 'insideEndTop',
-            },
-          } : undefined,
-        }],
-        graphic: pts.length ? [] : [{
-          type: 'text', left: 'center', top: 'middle',
-          style: { text: '暂无充电数据,无法估算', fill: cssVar('--text-muted'), fontSize: 12 },
-        }],
-      }), { notMerge: true });
-    }
 
     /* --- 四轮胎压:当前值 + 迷你平滑填充曲线;统一按与标准胎压 2.9 bar 的偏差着色 --- */
     const TPMS_STD = 2.9;
@@ -2023,7 +1996,6 @@
     charts.efficiency = echarts.init($('#chart-efficiency'));
     charts.tpms = echarts.init($('#chart-tpms'));
     charts.temp = echarts.init($('#chart-temp'));
-    charts.health = echarts.init($('#chart-health'));
     charts.wfl = echarts.init($('#chart-wfl'));
     charts.wfr = echarts.init($('#chart-wfr'));
     charts.wrl = echarts.init($('#chart-wrl'));
