@@ -210,8 +210,9 @@
             <span class="chip cat-sentry">哨兵</span>
             <span class="chip cat-idle">驻车耗电</span>
           </div>
-          <div class="seg mini batt-toggle" role="group" aria-label="电量/里程切换">
+          <div class="seg mini batt-toggle" role="group" aria-label="电量/度数/里程切换">
             <button data-mode="pct" class="on">电量 %</button>
+            <button data-mode="kwh">度数 kWh</button>
             <button data-mode="km">里程 km</button>
           </div>
         </div>
@@ -223,7 +224,7 @@
       <div class="card-head">
         <div>
           <h2>活动事件</h2>
-          <div class="card-sub">按时间顺序展示行程 / 充电 / 哨兵 / 驻车耗电,点击日期可折叠</div>
+          <div class="card-sub">按时间顺序展示行程 / 充电 / 哨兵 / 驻车耗电,电量 · 度数 · 里程 · 电费独立成列,点击日期可折叠</div>
         </div>
         <button class="icon-btn" id="events-toggle-btn">全部收起</button>
       </div>
@@ -246,8 +247,9 @@
         <div class="sentry-pane">
           <div class="pane-head">
             <h3>哨兵耗电曲线</h3>
-            <div class="seg mini batt-toggle" role="group" aria-label="电量/里程切换">
+            <div class="seg mini batt-toggle" role="group" aria-label="电量/度数/里程切换">
               <button data-mode="pct" class="on">电量 %</button>
+              <button data-mode="kwh">度数 kWh</button>
               <button data-mode="km">里程 km</button>
             </div>
           </div>
@@ -284,10 +286,11 @@
       <div class="card-head">
         <div>
           <h2>电量趋势</h2>
-          <div class="card-sub">仪表电量,按时间降采样;里程为按满电额定续航线性折算</div>
+          <div class="card-sub">仪表电量,按时间降采样;度数按充电校准换算,里程按满电额定续航线性折算</div>
         </div>
-        <div class="seg mini batt-toggle" role="group" aria-label="电量/里程切换">
+        <div class="seg mini batt-toggle" role="group" aria-label="电量/度数/里程切换">
           <button data-mode="pct" class="on">电量 %</button>
+          <button data-mode="kwh">度数 kWh</button>
           <button data-mode="km">里程 km</button>
         </div>
       </div>

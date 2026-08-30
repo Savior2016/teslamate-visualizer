@@ -473,6 +473,8 @@ def overview(car_id: int | None = Query(default=None)):
         "software_version": version,
         "latest": latest,
         "kwh_per_ideal_km": ratio,
+        # 每 1% 表显电量对应的电量(kWh),前端「度数」维度的换算系数
+        "kwh_per_pct": round(kwh_per_pct(cid), 3),
         "totals": {
             "drives_total": int(totals["drives_total"]),
             "month_km": float(totals["month_km"] or 0),
@@ -1141,6 +1143,12 @@ def activity(car_id: int | None = Query(default=None),
             c["rate_yuan_kwh"] = t["rate_yuan_kwh"]
 
     for d in drives:
+        # 行程起止电量:取行程窗口(前后放宽 5 分钟)内的首末电量采样
+        s_ms, e_ms = int(d["start_date_ts"]), int(d["end_date_ts"])
+        pts = [l for t, l, _ in samples if s_ms - 300000 <= t <= e_ms + 300000]
+        if len(pts) >= 2:
+            d["start_battery_level"] = pts[0]
+            d["end_battery_level"] = pts[-1]
         if d["start_ideal_range_km"] is None or d["end_ideal_range_km"] is None:
             continue
         delta_km = float(d["start_ideal_range_km"] - d["end_ideal_range_km"])

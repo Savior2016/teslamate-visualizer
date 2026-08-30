@@ -902,11 +902,23 @@ button { touch-action: manipulation; }
 
 .ev-row {
   display: grid;
-  grid-template-columns: 150px 96px 1fr 64px;
+  grid-template-columns: 150px 90px 1fr 66px 84px 76px 76px;
   gap: 10px;
   align-items: baseline;
   padding: 8px 14px;
   font-size: 13px;
+}
+
+/* 列头:与数据行同一栅格 */
+.ev-head {
+  padding-top: 4px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--gridline);
+}
+
+.ev-head span {
+  color: var(--text-muted);
+  font-size: 11px;
 }
 
 .ev-row + .ev-row { border-top: 1px solid var(--gridline); }
@@ -918,13 +930,15 @@ button { touch-action: manipulation; }
 
 .ev-desc { color: var(--text-muted); }
 
-.ev-delta {
+/* 数值列:电量 / 度数 / 里程 / 电费,右对齐等宽数字 */
+.ev-num {
   text-align: right;
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
-.ev-delta.up { color: var(--success); }
+.ev-num.up { color: var(--success); }
 
 .events-empty {
   padding: 24px;
@@ -1378,19 +1392,27 @@ footer a { color: var(--text-muted); }
   .wheel-fr, .wheel-rr { right: max(4px, calc(50% - 200px)); }
   .wheel-fl, .wheel-fr { top: 102px; }
   .wheel-rl, .wheel-rr { bottom: 80px; }
+  /* 事件列表:窄屏改为 时间列 + 数值格 2×2(自带小标签),详情独占一行 */
+  .ev-head { display: none; }
   .ev-row {
-    grid-template-columns: 108px 1fr 56px;
+    grid-template-columns: 108px 1fr 1fr;
     grid-template-areas:
-      "time chip delta"
-      "time desc desc";
-    row-gap: 2px;
+      "time batt kwh"
+      "time km cost"
+      "chip desc desc";
+    row-gap: 3px;
     column-gap: 8px;
     align-items: center;
   }
-  .ev-row .ev-time { grid-area: time; }
+  .ev-row .ev-time { grid-area: time; align-self: start; }
   .ev-row .ev-chip { grid-area: chip; }
-  .ev-row .ev-delta { grid-area: delta; }
   .ev-row .ev-desc { grid-area: desc; }
+  .ev-num[data-lab="电量"] { grid-area: batt; }
+  .ev-num[data-lab="度数"] { grid-area: kwh; }
+  .ev-num[data-lab="里程"] { grid-area: km; }
+  .ev-num[data-lab="电费"] { grid-area: cost; }
+  .ev-num { text-align: left; display: flex; gap: 5px; align-items: baseline; }
+  .ev-num::before { content: attr(data-lab); font-size: 10px; color: var(--text-muted); }
   .day-head .summary { gap: 8px; }
 
   /* 轨迹列表行:窄屏隐藏时长列,名称列省略 */
@@ -1470,7 +1492,7 @@ footer a { color: var(--text-muted); }
   }
   .day-head .chev { order: 2; margin-left: auto; }
   .ev-row {
-    grid-template-columns: 96px 1fr 52px;
+    grid-template-columns: 96px 1fr 1fr;
     padding: 8px 10px;
     font-size: 12px;
   }
