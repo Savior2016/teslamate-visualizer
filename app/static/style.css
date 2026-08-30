@@ -384,7 +384,11 @@ button { touch-action: manipulation; }
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 4px;
+  width: 100%;
+  max-width: 236px;
+  margin: 0 auto;
+  padding: 0 4px 11px;
+  box-sizing: border-box;
 }
 
 .car-eff-label { font-size: 10.5px; color: var(--text-muted); white-space: nowrap; }
@@ -397,6 +401,15 @@ button { touch-action: manipulation; }
   background: var(--tile-track);
 }
 
+.car-eff-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: 3px;
+  opacity: 0.8;
+}
+
 .car-eff-official {
   position: absolute;
   top: -4px;
@@ -405,6 +418,17 @@ button { touch-action: manipulation; }
   border-radius: 1px;
   background: var(--text-primary);
   opacity: 0.85;
+}
+
+.car-eff-official-val {
+  position: absolute;
+  top: 8px;
+  transform: translateX(-50%);
+  font-size: 9px;
+  line-height: 1;
+  color: var(--text-muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .car-eff-dot {

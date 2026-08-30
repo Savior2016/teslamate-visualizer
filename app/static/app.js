@@ -1288,7 +1288,14 @@
         $('#car-eff-official').style.left = `calc(${map(official).toFixed(1)}% - 1px)`;
         // 低于官方绿 / 高 10% 内黄 / 再高红
         const rel = eff / official;
-        $('#car-eff-dot').style.background = rel <= 1 ? '#3fae72' : rel <= 1.1 ? '#fab219' : '#d03b3b';
+        const dotColor = rel <= 1 ? '#3fae72' : rel <= 1.1 ? '#fab219' : '#d03b3b';
+        $('#car-eff-dot').style.background = dotColor;
+        const fill = $('#car-eff-fill');
+        fill.style.width = map(eff).toFixed(1) + '%';
+        fill.style.background = dotColor;
+        const offVal = $('#car-eff-official-val');
+        offVal.style.left = map(official).toFixed(1) + '%';
+        offVal.textContent = `官方 ${fmtNum(official, 0)}`;
         $('#car-eff-val').textContent = `${fmtNum(eff, 0)} Wh/km`;
         effG.hidden = false;
       } else {
