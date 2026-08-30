@@ -974,7 +974,86 @@ button { touch-action: manipulation; }
 
 .card.collapsible.open .card-chev { transform: rotate(180deg); }
 
-#cs-card:not(.open) .cs-list { display: none; }
+#cs-card:not(.open) .cs-list,
+#cs-card:not(.open) .cg-divider,
+#cs-card:not(.open) .cg-list { display: none; }
+
+/* 充电桩统计并入充电详情卡后的分隔小标题 */
+.cg-divider {
+  margin: 14px 4px 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.cg-divider span { font-weight: 400; font-size: 12px; color: var(--text-muted); margin-left: 8px; }
+
+/* ===== 停车费 ===== */
+.pk-form {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 4px 2px 10px;
+}
+
+.pk-form input, .pk-form select {
+  font: inherit;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--page);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 10px;
+  min-width: 0;
+}
+
+.pk-form input:focus, .pk-form select:focus {
+  outline: 2px solid var(--series-1);
+  outline-offset: -1px;
+}
+
+#pk-cost { width: 110px; }
+#pk-date { width: 140px; }
+#pk-days { width: 130px; }
+#pk-note { flex: 1 1 140px; }
+
+#pk-add {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  color: #fff;
+  background: var(--seq-blue-500);
+  border: 0;
+  border-radius: 8px;
+  padding: 7px 18px;
+}
+#pk-add:hover { background: var(--seq-blue-600); }
+
+.pk-list { display: flex; flex-direction: column; }
+
+.pk-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--gridline);
+  font-size: 13px;
+}
+.pk-row:last-child { border-bottom: 0; }
+.pk-date-t { color: var(--text-secondary); font-variant-numeric: tabular-nums; flex: none; }
+.pk-days-t {
+  flex: none; font-size: 11px; color: var(--text-muted);
+  border: 1px solid var(--border); border-radius: 4px; padding: 0 5px;
+}
+.pk-note-t { flex: 1; min-width: 0; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pk-cost-t { font-weight: 650; font-variant-numeric: tabular-nums; flex: none; }
+.pk-del {
+  flex: none; cursor: pointer; background: none; border: 0;
+  color: var(--text-muted); font-size: 14px; padding: 0 2px;
+}
+.pk-del:hover { color: #d03b3b; }
 
 .ev-row {
   display: grid;
@@ -1117,6 +1196,9 @@ button { touch-action: manipulation; }
 
 /* 地点:充电桩名称下方的小字 */
 .cs-loc-input { font-size: 11px; color: var(--text-muted); }
+
+/* 品牌:名称与地点之间的小字(与地点同视觉层级) */
+.cs-brand-input { font-size: 11.5px; color: var(--text-secondary); }
 
 .cs-fields {
   display: grid;

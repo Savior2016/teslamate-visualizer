@@ -1551,7 +1551,6 @@
       head.appendChild(timeBox);
 
       const chg = el('div', 'cs-charger');
-      if (c.charger_brand) chg.appendChild(el('span', 'cs-tag', c.charger_brand));
       const nameInp = el('input', 'cs-name-input');
       nameInp.type = 'text';
       nameInp.placeholder = '充电桩名称';
@@ -1564,17 +1563,29 @@
       locInp.maxLength = 120;
       locInp.value = c.charger_location || '';
       locInp.dataset.orig = c.charger_location || '';
+      // 品牌与名称/地点一起存档(按地点键,同地点自动带出)
+      const brandInp = el('input', 'cs-brand-input');
+      brandInp.type = 'text';
+      brandInp.placeholder = '品牌';
+      brandInp.maxLength = 40;
+      brandInp.value = c.charger_brand || '';
+      brandInp.dataset.orig = c.charger_brand || '';
       const saveCharger = () => {
         const name = nameInp.value.trim();
         const loc = locInp.value.trim();
-        if (name === nameInp.dataset.orig && loc === locInp.dataset.orig) return;
-        nameInp.disabled = locInp.disabled = true;
+        const brand = brandInp.value.trim();
+        if (name === nameInp.dataset.orig && loc === locInp.dataset.orig
+            && brand === brandInp.dataset.orig) return;
+        nameInp.disabled = locInp.disabled = brandInp.disabled = true;
         csSave('/api/charging/charger',
-          { charge_id: c.id, name, location: loc }, [nameInp, locInp], false);
+          { charge_id: c.id, name, location: loc, brand },
+          [nameInp, locInp, brandInp], false);
       };
       nameInp.addEventListener('change', saveCharger);
       locInp.addEventListener('change', saveCharger);
+      brandInp.addEventListener('change', saveCharger);
       chg.appendChild(nameInp);
+      chg.appendChild(brandInp);
       chg.appendChild(locInp);
       head.appendChild(chg);
       item.appendChild(head);
@@ -1799,6 +1810,91 @@
     });
   }
 
+  /* ---------- 渲染:停车费(手动记录;默认当天,可选覆盖接下来 N 天) ---------- */
+
+  function renderParking() {
+    const box = $('#pk-list');
+    if (!box || !S.parking) return;
+    box.textContent = '';
+
+    // 头部统计:本月合计 / 累计
+    const stats = $('#pk-stats');
+    stats.textContent = '';
+    const stat = (label, value) => {
+      const t = el('span', 'mini-stat');
+      t.appendChild(el('span', '', label + ' '));
+      t.appendChild(el('b', '', value));
+      stats.appendChild(t);
+    };
+    stat('本月', `¥${fmtNum(S.parking.month_total || 0, 2)}`);
+    stat('累计', `¥${fmtNum(S.parking.total || 0, 2)}`);
+
+    const fees = S.parking.fees || [];
+    if (!fees.length) {
+      box.appendChild(el('div', 'empty', '暂无停车费记录'));
+      return;
+    }
+    fees.forEach((f) => {
+      const row = el('div', 'pk-row');
+      row.appendChild(el('span', 'pk-date-t', f.date));
+      if (f.days > 1) row.appendChild(el('span', 'pk-days-t', `覆盖 ${f.days} 天`));
+      row.appendChild(el('span', 'pk-note-t', f.note || ''));
+      row.appendChild(el('b', 'pk-cost-t', `¥${fmtNum(f.cost, 2)}`));
+      const del = el('button', 'pk-del', '✕');
+      del.title = '删除这条记录';
+      del.addEventListener('click', async () => {
+        if (!confirm(`删除 ${f.date} 的 ¥${fmtNum(f.cost, 2)} 停车费记录?`)) return;
+        try {
+          await fetchJSON(`/api/parking/fees/${encodeURIComponent(f.key)}`,
+            { method: 'DELETE' });
+          S.parking = await api('parking/fees');
+          renderParking();
+        } catch (err) { console.error(err); }
+      });
+      row.appendChild(del);
+      box.appendChild(row);
+    });
+  }
+
+  function initParking() {
+    const dateInp = $('#pk-date');
+    if (!dateInp) return;
+    // 默认当天(本地时区)
+    const now = new Date();
+    const p = (n) => String(n).padStart(2, '0');
+    dateInp.value = `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`;
+    $('#pk-add').addEventListener('click', async () => {
+      const cost = parseFloat($('#pk-cost').value);
+      if (isNaN(cost) || cost <= 0) { $('#pk-cost').focus(); return; }
+      const body = {
+        date: dateInp.value,
+        cost,
+        days: parseInt($('#pk-days').value, 10) || 1,
+        note: $('#pk-note').value.trim(),
+      };
+      if (!body.date) { dateInp.focus(); return; }
+      const btn = $('#pk-add');
+      btn.disabled = true;
+      try {
+        await fetchJSON('/api/parking/fees', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        $('#pk-cost').value = '';
+        $('#pk-note').value = '';
+        $('#pk-days').value = '1';
+        S.parking = await api('parking/fees');
+        renderParking();
+      } catch (err) {
+        console.error(err);
+        btn.title = '保存失败,请重试';
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  }
+
   /* ---------- 渲染:地图 ---------- */
 
   function initMap() {
@@ -2001,7 +2097,7 @@
     try {
       const o = await api('overview');
       if (S.carId === null) S.carId = o.car_id;
-      const [daily, chg, routes, act, eff, tpms, sys, health, sessions, cyc, temp, tpms24] = await Promise.all([
+      const [daily, chg, routes, act, eff, tpms, sys, health, sessions, cyc, temp, tpms24, pk] = await Promise.all([
         api(`drives/daily?days=${S.days}`),
         api('charging/summary?limit=12'),
         api(`routes?days=${S.days}`),
@@ -2014,6 +2110,7 @@
         api('energy/cycles?limit=10'),
         api(`temp/trend?days=${S.days}`),
         api('tpms/trend?days=1'),
+        api('parking/fees'),
       ]);
       S.overview = {
         ...o,
@@ -2030,12 +2127,14 @@
       S.health = health;
       S.sessions = sessions;
       S.cycles = cyc;
+      S.parking = pk;
       $('#state-badge').dataset.state = 'unknown';
       renderSys(sys);
       renderHeader();
       renderCar();
       renderSessions();
       renderChargers();
+      renderParking();
       renderDaily();
       renderCharging();
       renderRoutes();
@@ -2059,7 +2158,7 @@
     renderDaily(); renderCharging();
     renderRoutes(); renderRoutesList();
     renderActivity(); renderEvents(); renderSentry();
-    renderEfficiency(); renderTpms(); renderCar(); renderSessions(); renderChargers(); renderTemp();
+    renderEfficiency(); renderTpms(); renderCar(); renderSessions(); renderChargers(); renderTemp(); renderParking();
   }
 
   /* ---------- 初始化 ---------- */
@@ -2159,6 +2258,8 @@
     csHead.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); csToggle(); }
     });
+
+    initParking();
 
     $('#events-toggle-btn').addEventListener('click', () => {
       const groups = document.querySelectorAll('#events-list .day-group');

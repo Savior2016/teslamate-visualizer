@@ -197,22 +197,41 @@
       <div class="card-head" id="cs-head" role="button" tabindex="0" title="点击展开 / 收起">
         <div>
           <h2>充电详情</h2>
-          <div class="card-sub">每次充电一张卡片;费用 / 总耗电(桩端计费电量)/ 充电桩名称可直接填写,同一地点自动带出上次填写的充电桩信息</div>
+          <div class="card-sub">每次充电一张卡片;费用 / 总耗电(桩端计费电量)/ 充电桩名称与品牌可直接填写,同一地点自动带出;下方按充电桩汇总统计</div>
         </div>
         <div class="mini-stats" id="cs-stats"></div>
         <span class="chev card-chev">▾</span>
       </div>
       <div class="cs-list" id="cs-list"></div>
+      <!-- 充电桩统计(并入本卡,随折叠):按桩汇总充电量/时长/损耗,点击行展开明细 -->
+      <div class="cg-divider">按充电桩汇总 <span>损耗 = 总耗电 − 充入电量;点击行展开每次充电明细</span></div>
+      <div class="cg-list" id="cg-list"></div>
     </div>
 
-    <div class="card col-12" id="cg-card">
+    <div class="card col-12" id="pk-card">
       <div class="card-head">
         <div>
-          <h2>充电桩统计</h2>
-          <div class="card-sub">按充电桩汇总所选时间范围内的充电量、充电时长与损耗(损耗 = 总耗电 − 充入电量);点击行展开每次充电明细,可手动填写桩品牌;桩名称在「充电详情」里填写</div>
+          <h2>停车费</h2>
+          <div class="card-sub">手动记录停车费用,默认记为当天;可选择费用覆盖接下来多少天</div>
         </div>
+        <div class="mini-stats" id="pk-stats"></div>
       </div>
-      <div class="cg-list" id="cg-list"></div>
+      <div class="pk-form">
+        <input type="number" id="pk-cost" placeholder="金额 ¥" min="0" step="0.01" inputmode="decimal">
+        <input type="date" id="pk-date">
+        <select id="pk-days">
+          <option value="1" selected>仅当天</option>
+          <option value="2">接下来 2 天</option>
+          <option value="3">接下来 3 天</option>
+          <option value="5">接下来 5 天</option>
+          <option value="7">接下来 7 天</option>
+          <option value="15">接下来 15 天</option>
+          <option value="30">接下来 30 天</option>
+        </select>
+        <input type="text" id="pk-note" placeholder="备注(可选)" maxlength="80">
+        <button id="pk-add">记录</button>
+      </div>
+      <div class="pk-list" id="pk-list"></div>
     </div>
 
     <div class="card col-12">
