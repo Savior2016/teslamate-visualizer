@@ -1846,6 +1846,7 @@
         borderColor: cssVar('--border'), borderWidth: 1, padding: [6, 10],
         textStyle: { color: cssVar('--text-primary'), fontSize: 12 },
         extraCssText: 'box-shadow: 0 4px 16px rgba(0,0,0,.18);border-radius:8px;',
+        axisPointer: { type: 'shadow', shadowStyle: { color: cssVar('--tile-track') } },
         formatter(params) {
           const p = pts[params[0].dataIndex];
           // 堆叠柱第二段是「差额」,tooltip 要显示换算出的完整估算值
@@ -1866,17 +1867,20 @@
               borderColor: cssVar('--series-3'), borderWidth: 1.5, borderType: 'dashed' } },
         ],
       },
-      grid: { left: 40, right: 8, top: 30, bottom: 22 },
-      xAxis: Object.assign({ type: 'time' }, axisCommon()),
+      grid: { left: 8, right: 12, top: 30, bottom: 4, containLabel: true },
+      // 与上方「充电记录」一致:按充电日期类目轴
+      xAxis: Object.assign(axisCommon(), { type: 'category',
+        data: pts.map((p) => fmtTime(Number(p.ts)).slice(0, 5)),
+        axisLabel: { color: cssVar('--text-muted'), fontSize: 11 } }),
       yAxis: Object.assign({ type: 'value', name: 'kWh', scale: true,
         nameTextStyle: { color: cssVar('--text-muted'), fontSize: 10 } }, axisCommon()),
       series: [
         // 实心柱:充后总电量;上方虚线框柱:到估算满电的差额(柱顶即估算满电)
         { name: '充后总电量', type: 'bar', stack: 'batt', barMaxWidth: 22,
-          data: pts.map((p) => [p.ts, p.after]),
+          data: pts.map((p) => p.after),
           itemStyle: { color: cssVar('--series-1'), borderRadius: [0, 0, 0, 0] } },
         { name: '估算满电', type: 'bar', stack: 'batt', barMaxWidth: 22,
-          data: pts.map((p) => [p.ts, Math.round((p.full - p.after) * 10) / 10]),
+          data: pts.map((p) => Math.round((p.full - p.after) * 10) / 10),
           itemStyle: {
             color: 'transparent',
             borderColor: cssVar('--series-3'),
