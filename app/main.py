@@ -491,41 +491,6 @@ def overview(car_id: int | None = Query(default=None)):
     }
 
 
-@app.get("/api/trend")
-def trend(car_id: int | None = Query(default=None),
-          days: int = Query(default=7, ge=1, le=90)):
-    cid = get_car_id(car_id)
-    # 电量数据密集(每分钟多条),按时间取模降采样
-    step = 120 if days <= 1 else 300 if days <= 3 else 600 if days <= 7 else 1800
-    battery = q(
-        f"""
-        SELECT {local_ts('date')}, battery_level
-        FROM positions
-        WHERE car_id = %s AND date >= now() - make_interval(days => %s)
-          AND battery_level IS NOT NULL
-          AND mod(extract(epoch FROM date)::bigint, %s) = 0
-        ORDER BY date
-        """,
-        (cid, days, step),
-    )
-    # 续航数据稀疏(仅清醒时段上报),不降采样,全部返回
-    range_rows = q(
-        f"""
-        SELECT {local_ts('date')}, rated_battery_range_km, ideal_battery_range_km
-        FROM positions
-        WHERE car_id = %s AND date >= now() - make_interval(days => %s)
-          AND rated_battery_range_km IS NOT NULL
-        ORDER BY date
-        """,
-        (cid, days),
-    )
-    # 数据量过大时按间隔抽稀,保证前端渲染流畅
-    if len(range_rows) > 3000:
-        keep = max(1, len(range_rows) // 3000)
-        range_rows = range_rows[::keep]
-    return {"days": days, "step_seconds": step, "battery": battery, "range": range_rows}
-
-
 @app.get("/api/drives/daily")
 def drives_daily(car_id: int | None = Query(default=None),
                  days: int = Query(default=30, ge=1, le=90)):
@@ -546,46 +511,6 @@ def drives_daily(car_id: int | None = Query(default=None),
         (cid, days),
     )
     return {"days": days, "days_rows": rows}
-
-
-@app.get("/api/drives/recent")
-def drives_recent(car_id: int | None = Query(default=None),
-                  limit: int = Query(default=10, ge=1, le=50)):
-    cid = get_car_id(car_id)
-    ratio = kwh_per_ideal_km(cid)
-    rows = q(
-        f"""
-        SELECT d.id, {local_ts('d.start_date', 'start_date')},
-               {local_ts('d.end_date', 'end_date')},
-               d.distance, d.duration_min, d.speed_max, d.outside_temp_avg,
-               d.start_ideal_range_km, d.end_ideal_range_km,
-               a1.name AS start_name, a1.city AS start_city,
-               a2.name AS end_name, a2.city AS end_city
-        FROM drives d
-        LEFT JOIN addresses a1 ON a1.id = d.start_address_id
-        LEFT JOIN addresses a2 ON a2.id = d.end_address_id
-        WHERE d.car_id = %s
-        ORDER BY d.start_date DESC
-        LIMIT %s
-        """,
-        (cid, limit),
-    )
-    for r in rows:
-        r["ideal_delta_km"] = (
-            float(r["start_ideal_range_km"] - r["end_ideal_range_km"])
-            if r["start_ideal_range_km"] is not None
-            and r["end_ideal_range_km"] is not None
-            else None
-        )
-        r["energy_kwh"] = (
-            r["ideal_delta_km"] * ratio if r["ideal_delta_km"] is not None else None
-        )
-        r["efficiency_wh_km"] = (
-            r["energy_kwh"] * 1000 / r["distance"]
-            if r["energy_kwh"] is not None and r["distance"]
-            else None
-        )
-    return {"kwh_per_ideal_km": ratio, "drives": rows}
 
 
 @app.get("/api/charging/summary")
@@ -626,88 +551,6 @@ def charging_summary(car_id: int | None = Query(default=None),
 class ChargeCostIn(BaseModel):
     charge_id: int
     cost: float
-
-
-@app.get("/api/charging/costs")
-def charging_costs(car_id: int | None = Query(default=None),
-                   days: int = Query(default=90, ge=1, le=730)):
-    """充电费用表:会话明细 + 用户录入费用 + 充电后至下次充电的行驶金额统计。"""
-    cid = get_car_id(car_id)
-    timeline = charge_rate_timeline(cid)  # 全部会话,升序
-    since_ms = _utc_ms(datetime.now(timezone.utc) - timedelta(days=days))
-    window = [c for c in timeline if c["start_ts"] >= since_ms]
-    if not window:
-        return {"kwh_per_pct": round(kwh_per_pct(cid), 3), "charges": []}
-
-    # 会话明细(起止电量/时长/地点)
-    details = q(
-        f"""
-        SELECT cp.id, {local_ts('cp.start_date', 'start_date')},
-               {local_ts('cp.end_date', 'end_date')},
-               cp.duration_min, cp.start_battery_level, cp.end_battery_level,
-               a.name AS address_name
-        FROM charging_processes cp
-        LEFT JOIN addresses a ON a.id = cp.address_id
-        WHERE cp.car_id = %s
-        ORDER BY cp.start_date DESC
-        LIMIT 300
-        """,
-        (cid,),
-    )
-    det_by_id = {d["id"]: d for d in details}
-
-    # 全部行程(用于「充电后」统计),升序
-    ratio = kwh_per_ideal_km(cid)
-    drives = q(
-        f"""
-        SELECT d.id, {local_ts('d.start_date', 'start_date')},
-               d.distance, d.start_ideal_range_km, d.end_ideal_range_km
-        FROM drives d
-        WHERE d.car_id = %s
-        ORDER BY d.start_date
-        """,
-        (cid,),
-    )
-    drive_ts = [int(d["start_date_ts"]) for d in drives]
-    drive_energy = []
-    for d in drives:
-        if d["start_ideal_range_km"] is None or d["end_ideal_range_km"] is None:
-            drive_energy.append(None)
-        else:
-            dk = float(d["start_ideal_range_km"] - d["end_ideal_range_km"])
-            drive_energy.append(dk * ratio if dk > 0 else None)
-
-    idx_by_id = {c["id"]: i for i, c in enumerate(timeline)}
-    out = []
-    for c in reversed(window):  # 展示用,新的在前
-        row = dict(c)
-        d = det_by_id.get(c["id"]) or {}
-        row.update({
-            "start_date_local": d.get("start_date_local"),
-            "end_date_local": d.get("end_date_local"),
-            "duration_min": d.get("duration_min"),
-            "start_battery_level": d.get("start_battery_level"),
-            "end_battery_level": d.get("end_battery_level"),
-            "address_name": d.get("address_name"),
-        })
-        # 充电后至下次充电前:行驶公里与耗电金额
-        ti = idx_by_id.get(c["id"], -1)
-        nxt = timeline[ti + 1] if 0 <= ti < len(timeline) - 1 else None
-        seg_end = nxt["start_ts"] if nxt else int(time.time() * 1000)
-        i0 = bisect.bisect_left(drive_ts, c["start_ts"])
-        i1 = bisect.bisect_right(drive_ts, seg_end)
-        km = cost = 0.0
-        for i in range(i0, i1):
-            km += float(drives[i]["distance"] or 0)
-            e = drive_energy[i]
-            if e is not None and row["rate_yuan_kwh"] is not None:
-                cost += e * row["rate_yuan_kwh"]
-        row["after_km"] = round(km, 1)
-        row["after_cost_yuan"] = round(cost, 2) if row["rate_yuan_kwh"] is not None else None
-        row["after_per_km_yuan"] = (round(cost / km, 4) if km > 0
-                                 and row["rate_yuan_kwh"] is not None else None)
-        out.append(row)
-    return {"kwh_per_pct": round(kwh_per_pct(cid), 3), "charges": out}
 
 
 @app.post("/api/charging/costs")

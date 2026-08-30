@@ -291,31 +291,8 @@
     </div>
 
   </div>
-  </div>
-
-  <section class="kpis" id="kpis"></section>
 
   <div class="grid">
-    <div class="card col-6">
-      <div class="card-head">
-        <div>
-          <h2>电量趋势</h2>
-          <div class="card-sub">仪表电量,按时间降采样;度数按充电校准换算,里程按满电额定续航线性折算</div>
-        </div>
-        <div class="seg mini batt-toggle" role="group" aria-label="电量/度数/里程切换">
-          <button data-mode="pct" class="on">电量 %</button>
-          <button data-mode="kwh">度数 kWh</button>
-          <button data-mode="km">里程 km</button>
-        </div>
-      </div>
-      <div class="chart" id="chart-battery"></div>
-    </div>
-    <div class="card col-6">
-      <h2>续航趋势</h2>
-      <div class="card-sub">额定续航(km),仅车辆清醒时段上报</div>
-      <div class="chart" id="chart-range"></div>
-    </div>
-
     <div class="card col-6">
       <h2>每日行驶里程</h2>
       <div class="card-sub">按出发日统计</div>
@@ -325,27 +302,6 @@
       <h2>充电记录</h2>
       <div class="card-sub">每次充电补充的电量</div>
       <div class="chart" id="chart-charging"></div>
-    </div>
-
-    <div class="card col-12">
-      <div class="card-head">
-        <div>
-          <h2>充电费用</h2>
-          <div class="card-sub">填写每次充电费用后,自动计算充电单价(¥/kWh)、每次行程与停放(哨兵/驻车)耗电的金额、充电后每公里金额</div>
-        </div>
-        <div class="mini-stats" id="cost-stats"></div>
-      </div>
-      <div class="table-scroll">
-        <table id="costs-table"></table>
-      </div>
-    </div>
-
-    <div class="card col-12">
-      <h2>最近行程</h2>
-      <div class="card-sub">能耗为估算值:按理想续航差值 × 充电校准系数</div>
-      <div class="table-scroll">
-        <table id="drives-table"></table>
-      </div>
     </div>
 
     <div class="card col-12">
