@@ -1817,16 +1817,17 @@
 
   function renderCsBatt() {
     const box = $('#chart-cs-batt');
-    if (!box || !S.sessions) return;
+    if (!box || !S.overview) return;
+    // 数据源同「充电记录」上图(charging/summary,最近 12 次,不随时间范围裁剪)
     const pts = [];
-    (S.sessions.charges || []).slice().reverse().forEach((c) => {  // 旧的在前
+    (S.overview.chargingSessions || []).slice().reverse().forEach((c) => {  // 旧的在前
       const s = c.start_battery_level, e = c.end_battery_level;
-      if (s == null || e == null || c.energy_kwh == null || !c.end_ts) return;
+      if (s == null || e == null || c.charge_energy_added == null || !c.end_date_ts) return;
       const d = e - s;
       if (d < 10) return;
-      const full = Number(c.energy_kwh) / d * 100;
+      const full = Number(c.charge_energy_added) / d * 100;
       if (full < 30 || full > 150) return;
-      pts.push({ ts: c.end_ts, level: e, full: Math.round(full * 10) / 10,
+      pts.push({ ts: c.end_date_ts, level: e, full: Math.round(full * 10) / 10,
                  after: Math.round(e * full) / 100 });
     });
     const emptyEl = $('#cs-batt-empty');
@@ -1847,28 +1848,43 @@
         extraCssText: 'box-shadow: 0 4px 16px rgba(0,0,0,.18);border-radius:8px;',
         formatter(params) {
           const p = pts[params[0].dataIndex];
-          const rows = params.map((m) =>
-            `${m.marker} ${m.seriesName} <b>${fmtNum(m.value[1], 1)} kWh</b>`).join('<br>');
+          // 堆叠柱第二段是「差额」,tooltip 要显示换算出的完整估算值
           return `<div style="color:${cssVar('--text-muted')};font-size:10px">` +
-                 `${fmtTime(p.ts)} · 充至 ${fmtNum(p.level, 0)}%</div>${rows}`;
+                 `${fmtTime(p.ts)} · 充至 ${fmtNum(p.level, 0)}%</div>` +
+                 `${params[0].marker} 充后总电量 <b>${fmtNum(p.after, 1)} kWh</b><br>` +
+                 `${params[1].marker} 估算满电 <b>${fmtNum(p.full, 1)} kWh</b>`;
         },
       },
       legend: {
         top: 0, right: 0,
         textStyle: { color: cssVar('--text-muted'), fontSize: 11 },
         itemWidth: 12, itemHeight: 8,
+        data: [
+          { name: '充后总电量' },
+          // 图例图标同步虚线框样式(系列本身是透明填充)
+          { name: '估算满电', itemStyle: { color: 'transparent',
+              borderColor: cssVar('--series-3'), borderWidth: 1.5, borderType: 'dashed' } },
+        ],
       },
-      grid: { left: 44, right: 8, top: 30, bottom: 22 },
+      grid: { left: 40, right: 8, top: 30, bottom: 22 },
       xAxis: Object.assign({ type: 'time' }, axisCommon()),
       yAxis: Object.assign({ type: 'value', name: 'kWh', scale: true,
         nameTextStyle: { color: cssVar('--text-muted'), fontSize: 10 } }, axisCommon()),
       series: [
-        { name: '充后总电量', type: 'bar', barMaxWidth: 24, barGap: '25%',
+        // 实心柱:充后总电量;上方虚线框柱:到估算满电的差额(柱顶即估算满电)
+        { name: '充后总电量', type: 'bar', stack: 'batt', barMaxWidth: 22,
           data: pts.map((p) => [p.ts, p.after]),
-          itemStyle: { color: cssVar('--series-1'), borderRadius: [4, 4, 0, 0] } },
-        { name: '估算满电', type: 'bar', barMaxWidth: 24,
-          data: pts.map((p) => [p.ts, p.full]),
-          itemStyle: { color: cssVar('--series-3'), borderRadius: [4, 4, 0, 0] } },
+          itemStyle: { color: cssVar('--series-1'), borderRadius: [0, 0, 0, 0] } },
+        { name: '估算满电', type: 'bar', stack: 'batt', barMaxWidth: 22,
+          data: pts.map((p) => [p.ts, Math.round((p.full - p.after) * 10) / 10]),
+          itemStyle: {
+            color: 'transparent',
+            borderColor: cssVar('--series-3'),
+            borderWidth: 1.5,
+            borderType: 'dashed',
+            borderRadius: [4, 4, 0, 0],
+          },
+          emphasis: { itemStyle: { color: cssVar('--series-3') + '22' } } },
       ],
     }), { notMerge: true });
   }
@@ -2317,7 +2333,6 @@
     const csToggle = () => {
       const open = csCard.classList.toggle('open');
       localStorage.setItem('ttv-cs-open', open ? '1' : '0');
-      if (open && charts.csBatt) charts.csBatt.resize();
     };
     csHead.addEventListener('click', csToggle);
     csHead.addEventListener('keydown', (e) => {
