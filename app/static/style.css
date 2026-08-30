@@ -337,14 +337,15 @@ header h1:active { opacity: 0.55; }
 button { touch-action: manipulation; }
 
 /* ===== 车辆总览:Model Y 俯视图(玻璃顶=能量显示区)+ 两侧图例 + 四轮胎压 ===== */
+/* 布局约束:图例与信息永远分列车辆两侧,任何宽度下都不许换行堆到下面 */
 .carview {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 16px;
   align-items: stretch;
 }
 
-/* 中央列:俯视图舞台(车头朝上)+ 车内温度迷你面板 */
+/* 中央列:俯视图舞台(车头朝上) */
 .car-mid {
   flex: 1 1 300px;
   min-width: 0;
@@ -367,17 +368,62 @@ button { touch-action: manipulation; }
   height: 100%;
 }
 
-/* 车内温度迷你面板(车尾下方,配温度曲线) */
-.temp-mini {
-  width: min(280px, 100%);
-  margin: 0 auto;
-  background: var(--surface-1);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 7px 10px 5px;
+/* 车内温度曲线:直接画在玻璃上(温度读数下方) */
+.car-temp-spark {
+  fill: none;
+  stroke: var(--series-2);
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+  stroke-linecap: round;
 }
 
-.temp-mini .wheel-chart { height: 46px; }
+.car-temp-spark-area { fill: var(--series-2); opacity: 0.16; }
+
+/* 车辆顶部:本周期平均能耗细长条(官方能耗为标点) */
+.car-eff {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px;
+}
+
+.car-eff-label { font-size: 10.5px; color: var(--text-muted); white-space: nowrap; }
+
+.car-eff-track {
+  position: relative;
+  flex: 1;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--tile-track);
+}
+
+.car-eff-official {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--text-primary);
+  opacity: 0.85;
+}
+
+.car-eff-dot {
+  position: absolute;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  border: 1.5px solid var(--surface-1);
+}
+
+.car-eff-val {
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--text-primary);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
 
 .car-body-base { fill: var(--tile-track); }
 
@@ -645,6 +691,7 @@ button { touch-action: manipulation; }
 .wheel-head {
   display: flex;
   align-items: baseline;
+  justify-content: center;
   gap: 4px;
   font-size: 11px;
   color: var(--text-muted);
@@ -652,7 +699,6 @@ button { touch-action: manipulation; }
 }
 
 .wheel-head b {
-  margin-left: auto;
   font-size: 15px;
   font-weight: 650;
   color: var(--text-primary);
@@ -1348,10 +1394,10 @@ footer a { color: var(--text-muted); }
   #map { height: 320px; }
   .chart-activity { height: 320px; }
   .sentry-split { grid-template-columns: 1fr; }
-  /* 车辆总览:窄屏舞台独占一行在上,左右图例并排落在下方 */
-  .car-mid { order: -1; flex: 1 1 100%; }
+  /* 车辆总览:窄屏仍保持左右两列夹车辆的布局,只收窄列宽与间距 */
+  .carview { gap: 10px; }
+  .car-legend { flex: 0 0 150px; gap: 8px; }
   .car-stage { height: 480px; }
-  .car-legend { flex: 1 1 40%; }
   .wheel-fl, .wheel-rl { left: max(4px, calc(50% - 222px)); }
   .wheel-fr, .wheel-rr { right: max(4px, calc(50% - 222px)); }
   .wheel-fl, .wheel-fr { top: 102px; }
@@ -1427,15 +1473,18 @@ footer a { color: var(--text-muted); }
   .chip-legend { gap: 10px; }
   .mini-stat { padding: 5px 10px; }
 
-  /* 车辆总览:舞台压低,轮子面板收窄贴舞台四角,图例项紧凑 */
-  .car-stage { height: 400px; }
-  .wheel { width: 96px; padding: 5px 6px 3px; }
+  /* 车辆总览:手机端仍两列夹车辆;舞台按车图比例伸缩,轮子面板收窄贴舞台四角 */
+  .carview { gap: 6px; }
+  .car-legend { flex: 0 0 96px; gap: 7px; }
+  .car-stage { height: auto; aspect-ratio: 340 / 470; }
+  .wheel { width: 64px; padding: 4px 5px 3px; }
+  .wheel-head b { font-size: 13.5px; }
   .wheel-fl { left: 0; top: 6px; }
   .wheel-fr { right: 0; top: 6px; }
   .wheel-rl { left: 0; bottom: 6px; }
   .wheel-rr { right: 0; bottom: 6px; }
-  .wheel-chart { height: 36px; }
-  .cl-item { padding: 7px 9px; }
+  .wheel-chart { height: 30px; }
+  .cl-item { padding: 7px 8px; gap: 7px; }
   .cl-val { font-size: 15px; }
   .chart-health { height: 130px; }
 

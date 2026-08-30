@@ -85,6 +85,15 @@
       <div class="carview">
         <div class="car-legend car-legend-l" id="car-legend-l"></div>
         <div class="car-mid">
+          <!-- 车辆顶部:本周期平均能耗细长条(官方能耗为标点) -->
+          <div class="car-eff" id="car-eff" hidden>
+            <span class="car-eff-label">均耗</span>
+            <div class="car-eff-track">
+              <i class="car-eff-official" id="car-eff-official"></i>
+              <i class="car-eff-dot" id="car-eff-dot"></i>
+            </div>
+            <b class="car-eff-val" id="car-eff-val">—</b>
+          </div>
           <div class="car-stage">
             <svg class="car-svg" viewBox="0 0 340 460" role="img" aria-label="Model Y 俯视图:玻璃顶环形能耗分布">
               <defs>
@@ -153,31 +162,32 @@
               <image id="car-badge" x="102" y="239.5" width="136" height="15.3" href="/model-yl-badge.png"/>
               <text id="car-center-model" class="car-center-model" x="170" y="258" style="display:none">—</text>
               <text id="car-center-temp" class="car-center-temp" x="170" y="296">—</text>
+              <!-- 车内温度曲线(直接画在玻璃上,温度读数下方) -->
+              <g clip-path="url(#car-glass-clip)">
+                <path id="car-temp-spark-area" class="car-temp-spark-area" d=""/>
+                <polyline id="car-temp-spark" class="car-temp-spark" points=""/>
+              </g>
               <!-- 后风挡:车外温度 -->
               <text id="car-temp-val" class="car-temp-val" x="170" y="410">—</text>
               <!-- 车身描边(顶层) -->
               <path class="car-body-line" d="M170 52 C196 52 218 62 232 84 C243 100 251 118 256 142 C261 168 263 190 261 210 C260 228 259 244 259 258 C259 288 261 316 261 334 C260 356 255 378 245 392 C233 408 205 418 170 418 C135 418 107 408 95 392 C85 378 80 356 79 334 C79 316 81 288 81 258 C81 244 80 228 79 210 C77 190 79 168 84 142 C89 118 97 100 108 84 C122 62 144 52 170 52 Z"/>
             </svg>
             <div class="wheel wheel-fl">
-              <div class="wheel-head"><span>左前</span><b id="tpms-val-fl">—</b><span class="wheel-unit">bar</span></div>
+              <div class="wheel-head"><b id="tpms-val-fl">—</b><span class="wheel-unit">bar</span></div>
               <div class="wheel-chart" id="chart-wfl"></div>
             </div>
             <div class="wheel wheel-fr">
-              <div class="wheel-head"><span>右前</span><b id="tpms-val-fr">—</b><span class="wheel-unit">bar</span></div>
+              <div class="wheel-head"><b id="tpms-val-fr">—</b><span class="wheel-unit">bar</span></div>
               <div class="wheel-chart" id="chart-wfr"></div>
             </div>
             <div class="wheel wheel-rl">
-              <div class="wheel-head"><span>左后</span><b id="tpms-val-rl">—</b><span class="wheel-unit">bar</span></div>
+              <div class="wheel-head"><b id="tpms-val-rl">—</b><span class="wheel-unit">bar</span></div>
               <div class="wheel-chart" id="chart-wrl"></div>
             </div>
             <div class="wheel wheel-rr">
-              <div class="wheel-head"><span>右后</span><b id="tpms-val-rr">—</b><span class="wheel-unit">bar</span></div>
+              <div class="wheel-head"><b id="tpms-val-rr">—</b><span class="wheel-unit">bar</span></div>
               <div class="wheel-chart" id="chart-wrr"></div>
             </div>
-          </div>
-          <div class="temp-mini">
-            <div class="wheel-head"><span>车内温度</span><b id="intemp-val">—</b><span class="wheel-unit">°C</span></div>
-            <div class="wheel-chart" id="chart-intemp"></div>
           </div>
         </div>
         <div class="car-legend car-legend-r" id="car-legend-r"></div>

@@ -1225,42 +1225,53 @@
     const outT = lat && lat.outside_temp != null ? Number(lat.outside_temp) : null;
     $('#car-center-temp').textContent = inT === null ? '—' : `车内 ${fmtNum(inT, 1)}°`;
     $('#car-temp-val').textContent = outT === null ? '—' : `${fmtNum(outT, 1)}°`;
-    const itv = $('#intemp-val');
-    if (itv) itv.textContent = inT === null ? '—' : fmtNum(inT, 1);
 
-    // 车内温度迷你曲线(车尾下方面板)
-    const tch = charts.intemp;
-    if (tch) {
-      const idata = ((o.temp && o.temp.inside) || []).map((p) => [Number(p[0]), Number(p[1])]);
-      const color = cssVar('--series-2');
-      tch.setOption(Object.assign({}, chartTheme(), {
-        animation: false,
-        tooltip: {
-          trigger: 'axis',
-          backgroundColor: cssVar('--surface-1'),
-          borderColor: cssVar('--border'), borderWidth: 1, padding: [5, 9],
-          textStyle: { color: cssVar('--text-primary'), fontSize: 11 },
-          extraCssText: 'box-shadow: 0 4px 16px rgba(0,0,0,.18);border-radius:8px;',
-          formatter(params) {
-            const p = params[0];
-            return `<div style="color:${cssVar('--text-muted')};font-size:10px">${fmtTime(p.value[0], true)}</div>` +
-                   `<b>${fmtNum(p.value[1], 1)} °C</b>`;
-          },
-        },
-        grid: { left: 2, right: 2, top: 3, bottom: 2 },
-        xAxis: { type: 'time', show: false },
-        yAxis: { type: 'value', show: false, scale: true },
-        series: [{
-          type: 'line', data: idata, smooth: 0.4, showSymbol: false,
-          lineStyle: { width: 1.6, color },
-          areaStyle: {
-            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-              { offset: 0, color: color + '59' },
-              { offset: 1, color: color + '0a' },
-            ]),
-          },
-        }],
-      }), { notMerge: true });
+    // 车内温度曲线:直接画在玻璃上(温度读数下方,x 112..228 / y 306..336)
+    const spark = $('#car-temp-spark');
+    const sparkArea = $('#car-temp-spark-area');
+    const idata = ((o.temp && o.temp.inside) || []).map((p) => [Number(p[0]), Number(p[1])]);
+    if (spark && sparkArea) {
+      if (idata.length < 2) {
+        spark.setAttribute('points', '');
+        sparkArea.setAttribute('d', '');
+      } else {
+        const X0 = 112, X1 = 228, Y0 = 306, Y1 = 336;
+        let lo = Infinity, hi = -Infinity;
+        idata.forEach((p) => { lo = Math.min(lo, p[1]); hi = Math.max(hi, p[1]); });
+        if (hi - lo < 2) { lo -= 1; hi += 1; }
+        const pad = (hi - lo) * 0.15; lo -= pad; hi += pad;
+        const t0 = idata[0][0], t1 = idata[idata.length - 1][0];
+        const pts = idata.map((p) => {
+          const x = X0 + (t1 > t0 ? (p[0] - t0) / (t1 - t0) : 0) * (X1 - X0);
+          const y = Y1 - (p[1] - lo) / (hi - lo) * (Y1 - Y0);
+          return `${x.toFixed(1)},${y.toFixed(1)}`;
+        });
+        spark.setAttribute('points', pts.join(' '));
+        sparkArea.setAttribute('d',
+          `M${X0},${Y1} L${pts.join(' L')} L${X1},${Y1} Z`);
+      }
+    }
+
+    // 车辆顶部:本周期平均能耗细长条(官方能耗=额定折算系数,作标点)
+    const effG = $('#car-eff');
+    if (effG) {
+      const dKwh = cyc && cyc.drive_kwh != null ? Number(cyc.drive_kwh) : 0;
+      const dKm = cyc && cyc.drive_km != null ? Number(cyc.drive_km) : 0;
+      const official = o.kwh_per_ideal_km ? Number(o.kwh_per_ideal_km) * 1000 : null;
+      if (dKm >= 1 && official) {
+        const eff = dKwh * 1000 / dKm;
+        const LO = 100, HI = 200;   // 刻度 100..200 Wh/km
+        const map = (v) => Math.max(0, Math.min(1, (v - LO) / (HI - LO))) * 100;
+        $('#car-eff-dot').style.left = map(eff).toFixed(1) + '%';
+        $('#car-eff-official').style.left = `calc(${map(official).toFixed(1)}% - 1px)`;
+        // 低于官方绿 / 高 10% 内黄 / 再高红
+        const rel = eff / official;
+        $('#car-eff-dot').style.background = rel <= 1 ? '#3fae72' : rel <= 1.1 ? '#fab219' : '#d03b3b';
+        $('#car-eff-val').textContent = `${fmtNum(eff, 0)} Wh/km`;
+        effG.hidden = false;
+      } else {
+        effG.hidden = true;
+      }
     }
 
     /* --- 右列:全部电耗分段(未充/驻车耗电/驻车空调/哨兵/行驶/剩余,与车身分带点选联动) --- */
@@ -1351,16 +1362,22 @@
       }), { notMerge: true });
     }
 
-    /* --- 四轮胎压:当前值 + 迷你平滑填充曲线 --- */
+    /* --- 四轮胎压:当前值 + 迷你平滑填充曲线;统一按与标准胎压 2.9 bar 的偏差着色 --- */
+    const TPMS_STD = 2.9;
+    const tpmsColor = (v) => {
+      const dev = Math.abs(v - TPMS_STD);
+      return dev <= 0.15 ? '#3fae72' : dev <= 0.3 ? '#fab219' : '#d03b3b';
+    };
     const w = (o.tpms && o.tpms.wheels) || {};
-    const wheels = [
-      ['fl', 'wfl', '--series-1'], ['fr', 'wfr', '--series-2'],
-      ['rl', 'wrl', '--series-3'], ['rr', 'wrr', '--series-4'],
-    ];
-    wheels.forEach(([key, cid, colorVar]) => {
+    const wheels = [['fl', 'wfl'], ['fr', 'wfr'], ['rl', 'wrl'], ['rr', 'wrr']];
+    wheels.forEach(([key, cid]) => {
       const data = (w[key] || []).map((p) => [Number(p[0]), Number(p[1])]);
+      const lastV = data.length ? data[data.length - 1][1] : null;
       const valEl = $(`#tpms-val-${key}`);
-      if (valEl) valEl.textContent = data.length ? fmtNum(data[data.length - 1][1], 1) : '—';
+      if (valEl) {
+        valEl.textContent = lastV === null ? '—' : fmtNum(lastV, 1);
+        valEl.style.color = lastV === null ? '' : tpmsColor(lastV);
+      }
       // 胎压上报量化为 0.1 bar 的阶梯:9 点滑动平均后再平滑,视觉上更柔和
       const sm = data.map((p, i) => {
         let s = 0, n = 0;
@@ -1371,7 +1388,7 @@
       });
       const ch = charts[cid];
       if (!ch) return;
-      const color = cssVar(colorVar);
+      const color = lastV === null ? cssVar('--baseline') : tpmsColor(lastV);
       ch.setOption(Object.assign({}, chartTheme(), {
         animation: false,
         tooltip: {
@@ -2011,7 +2028,6 @@
     charts.wfr = echarts.init($('#chart-wfr'));
     charts.wrl = echarts.init($('#chart-wrl'));
     charts.wrr = echarts.init($('#chart-wrr'));
-    charts.intemp = echarts.init($('#chart-intemp'));
 
     // 车辆总览:电量 % / 度数 kWh / 里程 km 三态切换(本卡片独立,持久化)
     const carSeg = $('#car-mode-seg');

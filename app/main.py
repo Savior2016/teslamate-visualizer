@@ -1228,7 +1228,7 @@ def energy_cycles(car_id: int | None = Query(default=None),
         f"""
         SELECT {local_ts('d.start_date', 'start_date')},
                {local_ts('d.end_date', 'end_date')},
-               d.start_ideal_range_km, d.end_ideal_range_km
+               d.start_ideal_range_km, d.end_ideal_range_km, d.distance
         FROM drives d
         WHERE d.car_id = %s AND d.start_date >= %s
         ORDER BY d.start_date
@@ -1243,7 +1243,8 @@ def energy_cycles(car_id: int | None = Query(default=None),
             delta = float(d["start_ideal_range_km"] - d["end_ideal_range_km"])
             if delta > 0:
                 kwh = delta * ratio
-        drives.append((int(d["start_date_ts"]), int(d["end_date_ts"]), kwh))
+        drives.append((int(d["start_date_ts"]), int(d["end_date_ts"]), kwh,
+                       float(d["distance"] or 0)))
 
     now_ms = int(time.time() * 1000)
 
@@ -1255,7 +1256,7 @@ def energy_cycles(car_id: int | None = Query(default=None),
             prev_end = int(groups[-1][-1]["end_date_ts"])
             gap = int(c["start_date_ts"]) - prev_end
             drove = any(a < int(c["start_date_ts"]) and b > prev_end
-                        for a, b, _ in drives)
+                        for a, b, _, _ in drives)
             if gap < 30 * 60 * 1000 or not drove:
                 groups[-1].append(c)
                 continue
@@ -1269,7 +1270,7 @@ def energy_cycles(car_id: int | None = Query(default=None),
         e = int(nxt["start_date_ts"]) if nxt else now_ms
         cyc_samples = [smp for smp in samples if s <= smp[0] <= e]
         # 挖除行驶与(被合并进来的)中途充电区间,避免电量跳变污染耗电归因
-        cyc_iv = [(a, b) for a, b, _ in drives if a < e and b > s]
+        cyc_iv = [(a, b) for a, b, _, _ in drives if a < e and b > s]
         cyc_iv += [(int(c["start_date_ts"]), int(c["end_date_ts"]))
                    for c in grp[1:]]
         seg = _split_segments(cyc_samples, cyc_iv)
@@ -1278,7 +1279,8 @@ def energy_cycles(car_id: int | None = Query(default=None),
                                     if p["kind"] == "climate"))
         idle_pct = max(0.0, -sum(p["delta"] for p in seg["idle"]
                                  if p["kind"] != "climate"))
-        drive_kwh = sum(k for a, _, k in drives if s <= a < e)
+        drive_kwh = sum(k for a, _, k, _ in drives if s <= a < e)
+        drive_km = sum(km for a, _, _, km in drives if s <= a < e)
         # 合并组的满电容量:总充电量 ÷ 总增幅,比单次更稳
         cap = None
         delta_grp = int(last["end_battery_level"]) - int(first["start_battery_level"])
@@ -1302,6 +1304,8 @@ def energy_cycles(car_id: int | None = Query(default=None),
             "uncharged_pct": max(0, 100 - level_after),
             "cap_kwh": cap,
             "drive_pct": round(drive_kwh / cap * 100, 1),
+            "drive_kwh": round(drive_kwh, 2),
+            "drive_km": round(drive_km, 1),
             "sentry_pct": round(sentry_pct, 1),
             "climate_pct": round(climate_pct, 1),
             "idle_pct": round(idle_pct, 1),
