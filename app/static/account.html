@@ -204,6 +204,22 @@
     <div class="form-msg" id="nu-msg"></div>
   </section>
 
+  <!-- 数据备份 / 迁移 -->
+  <section class="card">
+    <h2>数据备份 / 迁移</h2>
+    <p style="font-size:13px;color:var(--text-secondary);line-height:1.7;margin:4px 0 10px">
+      导出内容为<b>整个数据库</b>(行驶/充电/哨兵等全部遥测 + 手填的费用与充电桩信息)
+      以及面板账号,打包为一个 .tar.gz 文件。换新服务器时:先正常部署并启动服务,
+      再在此处导入备份包即可整体迁移(导入会<b>覆盖</b>当前数据库)。
+    </p>
+    <div class="form-row">
+      <button class="btn" id="bk-export">⬇ 导出备份</button>
+      <input type="file" id="bk-file" accept=".gz,.tgz" style="flex:1 1 200px">
+      <button class="btn ghost" id="bk-import">⬆ 导入并覆盖恢复</button>
+    </div>
+    <div class="form-msg" id="bk-msg"></div>
+  </section>
+
 </div>
 <script src="/account.js"></script>
 </body>

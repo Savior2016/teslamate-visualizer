@@ -1534,5 +1534,8 @@ def remove_user(name: str, request: Request):
     return {"ok": True, "users": sorted(users)}
 
 
+from .backup import router as backup_router
+app.include_router(backup_router)  # 须在 app.mount("/") 之前注册
+
 app.mount("/", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static"),
                            html=True), name="static")

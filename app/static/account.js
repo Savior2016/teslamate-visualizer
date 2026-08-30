@@ -192,6 +192,37 @@
     }
   }
 
+  /* ---------- 数据备份 / 迁移 ---------- */
+  const bkMsg = $('bk-msg');
+
+  $('bk-export').onclick = () => {
+    msg(bkMsg, '正在生成备份(数据库较大时可能需要一两分钟)…', true);
+    window.location = '/api/backup/export';
+    setTimeout(() => msg(bkMsg, '✓ 导出已开始下载', true), 3000);
+  };
+
+  $('bk-import').onclick = async () => {
+    const f = $('bk-file').files[0];
+    if (!f) { msg(bkMsg, '请先选择备份文件(.tar.gz)', false); return; }
+    if (!confirm(`确定导入「${f.name}」?\n\n导入会覆盖当前数据库与面板账号,不可撤销。`)) return;
+    const btn = $('bk-import');
+    btn.disabled = true;
+    msg(bkMsg, '上传并恢复中,请勿关闭页面…', true);
+    try {
+      const fd = new FormData();
+      fd.append('file', f);
+      const r = await fetch('/api/backup/import', { method: 'POST', body: fd });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.detail || `HTTP ${r.status}`);
+      msg(bkMsg, `✓ 恢复完成${data.users_restored ? '(含面板账号)' : ''}。建议刷新面板首页确认数据。`, true);
+      $('bk-file').value = '';
+    } catch (e) {
+      msg(bkMsg, e.message, false);
+    } finally {
+      btn.disabled = false;
+    }
+  };
+
   loadStatus();
   pollTimer = setInterval(loadStatus, 15000); // 授权完成前每 15 秒自动刷新状态
 })();
