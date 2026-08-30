@@ -58,7 +58,8 @@ services:
       - mosquitto-data:/mosquitto/data
 
   visualizer:
-    image: ${VISUALIZER_IMAGE:-ghcr.io/savior2016/teslamate-visualizer:latest}
+    image: ${VISUALIZER_IMAGE:-teslamate-visualizer:latest}
+    build: .   # 默认从本仓库源码构建;配置了预构建镜像仓库时可注释掉本行直接 pull
     container_name: teslamate-visualizer
     restart: always
     depends_on:

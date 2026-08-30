@@ -67,9 +67,9 @@ mkdir -p data import
 
 # ---------- 启动 ----------
 echo
-info "拉取镜像并启动服务 ..."
-docker compose "${PROFILE_ARGS[@]}" pull --quiet || warn "部分镜像拉取失败,将尝试直接启动"
-docker compose "${PROFILE_ARGS[@]}" up -d
+info "构建面板镜像并启动服务 ..."
+docker compose "${PROFILE_ARGS[@]}" pull --quiet --ignore-buildable || warn "部分镜像拉取失败,将尝试直接启动"
+docker compose "${PROFILE_ARGS[@]}" up -d --build
 
 echo
 ok "部署完成!"

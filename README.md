@@ -20,7 +20,7 @@
 - 单 compose 编排:TeslaMate + PostgreSQL + MQTT + 面板(可选 Grafana、Caddy HTTPS)
 - `setup.sh` 一键初始化(自动生成密钥与面板账号)
 - 面板**个人中心**:自助完成 Tesla 账号授权(分步可视化指引)、修改密码、管理账号
-- 镜像版本发布:ghcr.io 预构建镜像(amd64/arm64),tag 即发布
+- 版本管理:git tag 发布版本,面板镜像从源码本地构建(amd64/arm64 均可)
 
 ## 快速开始(全新机器)
 
@@ -64,8 +64,7 @@ TeslaMate 通过 Tesla 官方 API 令牌连接车辆。整个过程在面板「�
 cp .env.example .env
 # 编辑 .env:TESLAMATE_ENCRYPTION_KEY(可用 openssl rand -hex 32 生成)、
 #           POSTGRES_PASSWORD、PANEL_USERS
-docker compose pull
-docker compose up -d
+docker compose up -d --build
 ```
 
 可选服务(profile):
@@ -87,10 +86,10 @@ docker compose --profile https up -d     # Caddy 自动 HTTPS,先复制 Caddyfil
 ## 升级版本
 
 ```bash
-# 面板升级到指定版本(版本号见 Releases):
-sed -i 's|^VISUALIZER_IMAGE=.*|VISUALIZER_IMAGE=ghcr.io/savior2016/teslamate-visualizer:v1.0.0|' .env
-# TeslaMate 升级:改 .env 的 TESLAMATE_VERSION(建议先备份数据库)
-docker compose pull && docker compose up -d
+git pull --tags                      # 面板升级:拉到最新代码/版本 tag
+docker compose up -d --build         # 重新构建面板镜像并滚动重启
+# TeslaMate 升级:改 .env 的 TESLAMATE_VERSION(建议先备份数据库),然后
+docker compose pull teslamate && docker compose up -d
 ```
 
 ## 配置项(.env)
@@ -130,11 +129,11 @@ docker compose pull && docker compose up -d
 ## 开发
 
 ```bash
-# 面板从本地源码构建运行:
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+# 改完 app/ 下源码后重新构建并重启面板:
+docker compose up -d --build visualizer
 
-# 发布版本(推 tag 触发 GitHub Actions,构建多架构镜像并推送 ghcr.io):
-git tag v1.0.0 && git push origin v1.0.0
+# 发布版本:
+git tag v1.x.y && git push origin v1.x.y
 ```
 
 ## 实现说明
