@@ -285,7 +285,11 @@ async def auth_and_headers(request: Request, call_next):
     users = auth_users()
     if users and request.url.path != "/api/health" \
             and not request.url.path.startswith("/api/tiles/"):
-        ip = request.client.host if request.client else "?"
+        # 应用只在 Caddy 反代之后可达(8080 仅绑 127.0.0.1),
+        # 真实客户端 IP 取 Caddy 写入的 X-Forwarded-For,
+        # 否则所有访客共享一个限流计数,扫描器一探测就全站 429。
+        xff = request.headers.get("X-Forwarded-For", "")
+        ip = xff.split(",")[0].strip() or (request.client.host if request.client else "?")
         now = time.time()
         fails = [t for t in _failures[ip] if now - t < FAIL_WINDOW]
         _failures[ip] = fails

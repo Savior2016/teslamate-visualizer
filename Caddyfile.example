@@ -1,5 +1,9 @@
 # 复制为 Caddyfile 后,把 tesla.example.com 换成你的域名(需已解析到本机,80/443 已放行)
 # Caddy 只负责自动 HTTPS(Let's Encrypt 证书签发与续期);登录认证由面板应用层完成。
 tesla.example.com {
+	# 常见扫描器探测路径:直接断开连接(不消耗应用层认证失败计数)
+	@scan path /.env* /.git* /.aws* /.stripe* /aws-ses.json /wp-* /xmlrpc.php /jsonrpc
+	abort @scan
+
 	reverse_proxy visualizer:8080
 }
