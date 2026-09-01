@@ -115,11 +115,12 @@
               <!-- HUD 角标 -->
               <path class="car-hud" d="M26 8 L8 8 L8 26 M8 434 L8 452 L26 452
                                        M314 452 L332 452 L332 434 M332 26 L332 8 L314 8"/>
-              <!-- 轮胎(车身下层,四角探出的深色圆角块;车头朝上) -->
-              <rect class="car-tire" x="66" y="108" width="16" height="60" rx="8"/>
-              <rect class="car-tire" x="258" y="108" width="16" height="60" rx="8"/>
-              <rect class="car-tire" x="66" y="316" width="16" height="62" rx="8"/>
-              <rect class="car-tire" x="258" y="316" width="16" height="62" rx="8"/>
+              <!-- 轮胎(车身下层,四角探出的深色圆角块;车头朝上)
+                   YL 前窄后宽:前轮宽 32,后轮宽 38(比前轮多 20%);胎压直接显示在轮胎上 -->
+              <rect class="car-tire" x="58" y="108" width="32" height="60" rx="10"/>
+              <rect class="car-tire" x="250" y="108" width="32" height="60" rx="10"/>
+              <rect class="car-tire" x="55" y="316" width="38" height="62" rx="11"/>
+              <rect class="car-tire" x="247" y="316" width="38" height="62" rx="11"/>
               <!-- 车身底色(Model Y 圆润轮廓:短车头 + 翼子板外鼓 + 收窄车尾) -->
               <path class="car-body-base" d="M170 52 C196 52 218 62 232 84 C243 100 251 118 256 142 C261 168 263 190 261 210 C260 228 259 244 259 258 C259 288 261 316 261 334 C260 356 255 378 245 392 C233 408 205 418 170 418 C135 418 107 408 95 392 C85 378 80 356 79 334 C79 316 81 288 81 258 C81 244 80 228 79 210 C77 190 79 168 84 142 C89 118 97 100 108 84 C122 62 144 52 170 52 Z"/>
               <!-- 车头微光(立体感) -->
@@ -159,13 +160,13 @@
               <image id="car-badge" x="102" y="239.5" width="136" height="15.3" href="/model-yl-badge.png"/>
               <text id="car-center-model" class="car-center-model" x="170" y="258" style="display:none">—</text>
               <text id="car-center-temp" class="car-center-temp" x="170" y="296">—</text>
-              <!-- 车内温度曲线(直接画在玻璃上,温度读数下方) -->
-              <g clip-path="url(#car-glass-clip)">
-                <path id="car-temp-spark-area" class="car-temp-spark-area" d=""/>
-                <polyline id="car-temp-spark" class="car-temp-spark" points=""/>
-              </g>
               <!-- 后风挡:车外温度 -->
               <text id="car-temp-val" class="car-temp-val" x="170" y="410">—</text>
+              <!-- 胎压读数:直接写在四条轮胎上(按与标准 2.9 bar 的偏差着色) -->
+              <text id="tpms-on-fl" class="car-tpms-tire" x="72" y="138">—</text>
+              <text id="tpms-on-fr" class="car-tpms-tire" x="268" y="138">—</text>
+              <text id="tpms-on-rl" class="car-tpms-tire" x="71" y="347">—</text>
+              <text id="tpms-on-rr" class="car-tpms-tire" x="269" y="347">—</text>
               <!-- 车身描边(顶层) -->
               <path class="car-body-line" d="M170 52 C196 52 218 62 232 84 C243 100 251 118 256 142 C261 168 263 190 261 210 C260 228 259 244 259 258 C259 288 261 316 261 334 C260 356 255 378 245 392 C233 408 205 418 170 418 C135 418 107 408 95 392 C85 378 80 356 79 334 C79 316 81 288 81 258 C81 244 80 228 79 210 C77 190 79 168 84 142 C89 118 97 100 108 84 C122 62 144 52 170 52 Z"/>
               </g>
@@ -173,25 +174,6 @@
           </div>
         </div>
         <div class="car-legend car-legend-r" id="car-legend-r"></div>
-      </div>
-      <!-- 四轮胎压:独立一行,不覆盖车身俯视图;只展示最近 24 小时 -->
-      <div class="wheels-row">
-        <div class="wheel wheel-fl">
-          <div class="wheel-head"><span class="wheel-pos">左前</span><b id="tpms-val-fl">—</b><span class="wheel-unit">bar</span></div>
-          <div class="wheel-chart" id="chart-wfl"></div>
-        </div>
-        <div class="wheel wheel-fr">
-          <div class="wheel-head"><span class="wheel-pos">右前</span><b id="tpms-val-fr">—</b><span class="wheel-unit">bar</span></div>
-          <div class="wheel-chart" id="chart-wfr"></div>
-        </div>
-        <div class="wheel wheel-rl">
-          <div class="wheel-head"><span class="wheel-pos">左后</span><b id="tpms-val-rl">—</b><span class="wheel-unit">bar</span></div>
-          <div class="wheel-chart" id="chart-wrl"></div>
-        </div>
-        <div class="wheel wheel-rr">
-          <div class="wheel-head"><span class="wheel-pos">右后</span><b id="tpms-val-rr">—</b><span class="wheel-unit">bar</span></div>
-          <div class="wheel-chart" id="chart-wrr"></div>
-        </div>
       </div>
     </div>
   </div>

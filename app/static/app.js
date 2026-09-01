@@ -1316,32 +1316,6 @@
     $('#car-center-temp').textContent = inT === null ? '—' : `车内 ${fmtNum(inT, 1)}°`;
     $('#car-temp-val').textContent = outT === null ? '—' : `${fmtNum(outT, 1)}°`;
 
-    // 车内温度曲线:直接画在玻璃上(温度读数下方,x 112..228 / y 306..336)
-    const spark = $('#car-temp-spark');
-    const sparkArea = $('#car-temp-spark-area');
-    const idata = ((o.temp && o.temp.inside) || []).map((p) => [Number(p[0]), Number(p[1])]);
-    if (spark && sparkArea) {
-      if (idata.length < 2) {
-        spark.setAttribute('points', '');
-        sparkArea.setAttribute('d', '');
-      } else {
-        const X0 = 112, X1 = 228, Y0 = 306, Y1 = 336;
-        let lo = Infinity, hi = -Infinity;
-        idata.forEach((p) => { lo = Math.min(lo, p[1]); hi = Math.max(hi, p[1]); });
-        if (hi - lo < 2) { lo -= 1; hi += 1; }
-        const pad = (hi - lo) * 0.15; lo -= pad; hi += pad;
-        const t0 = idata[0][0], t1 = idata[idata.length - 1][0];
-        const pts = idata.map((p) => {
-          const x = X0 + (t1 > t0 ? (p[0] - t0) / (t1 - t0) : 0) * (X1 - X0);
-          const y = Y1 - (p[1] - lo) / (hi - lo) * (Y1 - Y0);
-          return `${x.toFixed(1)},${y.toFixed(1)}`;
-        });
-        spark.setAttribute('points', pts.join(' '));
-        sparkArea.setAttribute('d',
-          `M${X0},${Y1} L${pts.join(' L')} L${X1},${Y1} Z`);
-      }
-    }
-
     // 车辆顶部:本周期平均能耗细长条(官方能耗=额定折算系数,作标点)
     const effG = $('#car-eff');
     if (effG) {
@@ -1410,62 +1384,21 @@
     fillCol('#car-legend-r', itemsR);
 
 
-    /* --- 四轮胎压:当前值 + 迷你平滑填充曲线(只看最近 24 小时);
-           统一按与标准胎压 2.9 bar 的偏差着色 --- */
+    /* --- 四轮胎压:当前值直接写在轮胎上(最近 24 小时最后一条上报);
+           统一按与标准胎压 2.9 bar 的偏差着色;趋势图见「车况」页 --- */
     const TPMS_STD = 2.9;
     const tpmsColor = (v) => {
       const dev = Math.abs(v - TPMS_STD);
       return dev <= 0.15 ? '#3fae72' : dev <= 0.3 ? '#fab219' : '#d03b3b';
     };
     const w = (o.tpms24 && o.tpms24.wheels) || {};
-    const wheels = [['fl', 'wfl'], ['fr', 'wfr'], ['rl', 'wrl'], ['rr', 'wrr']];
-    wheels.forEach(([key, cid]) => {
+    ['fl', 'fr', 'rl', 'rr'].forEach((key) => {
       const data = (w[key] || []).map((p) => [Number(p[0]), Number(p[1])]);
       const lastV = data.length ? data[data.length - 1][1] : null;
-      const valEl = $(`#tpms-val-${key}`);
-      if (valEl) {
-        valEl.textContent = lastV === null ? '—' : fmtNum(lastV, 1);
-        valEl.style.color = lastV === null ? '' : tpmsColor(lastV);
-      }
-      // 胎压上报量化为 0.1 bar 的阶梯:9 点滑动平均后再平滑,视觉上更柔和
-      const sm = data.map((p, i) => {
-        let s = 0, n = 0;
-        for (let j = Math.max(0, i - 4); j <= Math.min(data.length - 1, i + 4); j++) {
-          s += data[j][1]; n++;
-        }
-        return [p[0], Math.round(s / n * 100) / 100];
-      });
-      const ch = charts[cid];
-      if (!ch) return;
-      const color = lastV === null ? cssVar('--baseline') : tpmsColor(lastV);
-      ch.setOption(Object.assign({}, chartTheme(), {
-        animation: false,
-        tooltip: {
-          trigger: 'axis',
-          backgroundColor: cssVar('--surface-1'),
-          borderColor: cssVar('--border'), borderWidth: 1, padding: [5, 9],
-          textStyle: { color: cssVar('--text-primary'), fontSize: 11 },
-          extraCssText: 'box-shadow: 0 4px 16px rgba(0,0,0,.18);border-radius:8px;',
-          formatter(params) {
-            const p = params[0];
-            return `<div style="color:${cssVar('--text-muted')};font-size:10px">${fmtTime(p.value[0], true)}</div>` +
-                   `<b>${fmtNum(p.value[1], 1)} bar</b>`;
-          },
-        },
-        grid: { left: 2, right: 2, top: 3, bottom: 2 },
-        xAxis: { type: 'time', show: false },
-        yAxis: { type: 'value', show: false, scale: true },
-        series: [{
-          type: 'line', data: sm, smooth: true, smoothMonotone: 'x', showSymbol: false,
-          lineStyle: { width: 1.6, color, cap: 'round' },
-          areaStyle: {
-            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-              { offset: 0, color: color + '59' },
-              { offset: 1, color: color + '0a' },
-            ]),
-          },
-        }],
-      }), { notMerge: true });
+      const t = $(`#tpms-on-${key}`);
+      if (!t) return;
+      t.textContent = lastV === null ? '—' : fmtNum(lastV, 1);
+      t.style.fill = lastV === null ? 'var(--text-muted)' : tpmsColor(lastV);
     });
   }
 
@@ -2549,10 +2482,6 @@
     charts.efficiency = echarts.init($('#chart-efficiency'));
     charts.tpms = echarts.init($('#chart-tpms'));
     charts.temp = echarts.init($('#chart-temp'));
-    charts.wfl = echarts.init($('#chart-wfl'));
-    charts.wfr = echarts.init($('#chart-wfr'));
-    charts.wrl = echarts.init($('#chart-wrl'));
-    charts.wrr = echarts.init($('#chart-wrr'));
 
     // 功能分页:底部 Tab 栏点击切换,记忆上次所在页
     $('#tabbar').addEventListener('click', (e) => {
