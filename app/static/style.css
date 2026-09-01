@@ -1608,6 +1608,153 @@ footer a { color: var(--text-muted); }
 .tabbar .tab:active { transform: scale(0.92); }
 .tabbar .tab.on { color: var(--text-primary); font-weight: 600; }
 
+/* ===== 车辆控制分页 ===== */
+/* 车辆当前状态条 */
+.ctl-state {
+  display: flex;
+  gap: 10px 22px;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 10px 14px;
+  margin: 4px 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--page);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.ctl-state:empty { display: none; }
+.ctl-state .badge { font-size: 12px; }
+.ctl-state b { color: var(--text-primary); font-weight: 600; }
+.ctl-state .ctl-sleep-hint { color: var(--series-4); width: 100%; font-size: 12px; }
+
+/* 未配置引导 */
+.ctl-setup { text-align: center; padding: 34px 16px 30px; }
+.ctl-setup-icon { font-size: 40px; margin-bottom: 8px; }
+.ctl-setup h3 { margin: 0 0 8px; font-size: 17px; }
+.ctl-setup p { color: var(--text-secondary); font-size: 13.5px; line-height: 1.8; margin: 0 0 16px; }
+
+/* 功能分组:桌面 2×2,手机单列 */
+.ctl-groups {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.ctl-group {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 14px 12px;
+  background: var(--page);
+}
+.ctl-group h3 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+}
+
+/* 指令按钮:大触点玻璃风 */
+.ctl-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.ctl-grid.two { grid-template-columns: repeat(2, 1fr); }
+.ctl-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 12px 4px 10px;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text-primary);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.ctl-btn i { font-style: normal; font-size: 19px; line-height: 1; }
+.ctl-btn:hover { border-color: var(--baseline); box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12); }
+.ctl-btn:active { transform: scale(0.95); }
+.ctl-btn:disabled { opacity: 0.45; cursor: default; transform: none; }
+.ctl-btn.busy { opacity: 0.6; }
+.ctl-btn.warn { border-color: color-mix(in srgb, #d03b3b 40%, transparent); }
+
+/* 参数行:温度步进 / 充电上限滑杆 */
+.ctl-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--gridline);
+}
+.ctl-row-label { font-size: 12.5px; color: var(--text-muted); white-space: nowrap; }
+.ctl-step {
+  width: 32px; height: 32px; flex: none;
+  font: inherit; font-size: 18px; line-height: 1;
+  color: var(--text-primary);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  cursor: pointer;
+}
+.ctl-step:active { transform: scale(0.92); }
+.ctl-val { font-size: 15px; min-width: 58px; text-align: center; font-variant-numeric: tabular-nums; }
+.ctl-apply {
+  margin-left: auto;
+  font: inherit; font-size: 13px; font-weight: 600;
+  color: #fff; background: var(--seq-blue-500);
+  border: 0; border-radius: 9px; padding: 7px 16px;
+  cursor: pointer;
+}
+.ctl-apply:hover { background: var(--seq-blue-600); }
+.ctl-apply:disabled { opacity: 0.5; cursor: default; }
+.ctl-row input[type="range"] {
+  flex: 1; min-width: 0;
+  accent-color: var(--series-1);
+  height: 28px;
+}
+
+.ctl-note {
+  margin: 14px 2px 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.7;
+}
+
+/* 指令结果 toast(浮在 Tab 栏上方) */
+.ctl-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(max(14px, env(safe-area-inset-bottom)) + 74px);
+  transform: translateX(-50%) translateY(12px);
+  z-index: 1300;
+  max-width: min(420px, calc(100vw - 40px));
+  padding: 10px 18px;
+  border-radius: 999px;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--surface-1) 82%, transparent);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  backdrop-filter: blur(16px) saturate(160%);
+  border: 1px solid var(--border);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.ctl-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.ctl-toast.err { border-color: color-mix(in srgb, #d03b3b 55%, transparent); color: #e86a6a; }
+
+@media (max-width: 700px) {
+  .ctl-groups { grid-template-columns: 1fr; }
+}
+
 /* ===== 响应式:平板 / 手机 ===== */
 @media (max-width: 900px) {
   .wrap { padding: 16px 12px 104px; }

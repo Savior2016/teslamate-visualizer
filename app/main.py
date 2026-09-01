@@ -350,8 +350,10 @@ app = FastAPI(title="TeslaMate Telemetry Visualizer", lifespan=lifespan)
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 
-# 无需认证即可访问的路径:健康检查、地图瓦片代理、登录页及其静态资源、登录/登出接口
-_AUTH_EXACT = {"/api/health", "/api/login", "/api/logout", "/login", "/login.js", "/style.css"}
+# 无需认证即可访问的路径:健康检查、地图瓦片代理、登录页及其静态资源、登录/登出接口、
+# Tesla 虚拟钥匙公钥(Tesla 服务器拉取,必须公开)
+_AUTH_EXACT = {"/api/health", "/api/login", "/api/logout", "/login", "/login.js", "/style.css",
+               "/.well-known/appspecific/com.tesla.3p.public-key.pem"}
 _AUTH_PREFIX = ("/api/tiles/", "/fonts/")
 
 
@@ -1663,8 +1665,10 @@ def logout():
 
 
 from .backup import router as backup_router
+from .control import router as control_router
 from .parking import router as parking_router
 app.include_router(backup_router)   # 须在 app.mount("/") 之前注册
+app.include_router(control_router)
 app.include_router(parking_router)
 
 app.mount("/", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static"),

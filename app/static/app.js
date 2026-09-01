@@ -2218,6 +2218,7 @@
       $('#state-badge').dataset.state = 'unknown';
       renderSys(sys);
       renderHeader();
+      renderCtlState();
       renderCar();
       renderSessions();
       renderChargers();
@@ -2251,7 +2252,7 @@
 
   /* ---------- 功能分页(底部液态玻璃 Tab 栏) ---------- */
 
-  const PAGE_IDS = ['overview', 'charging', 'drives', 'activity', 'vehicle'];
+  const PAGE_IDS = ['overview', 'charging', 'drives', 'activity', 'vehicle', 'control'];
   let mapShown = false;  // 行程页首次显示时需 invalidateSize + 重新 fitBounds
 
   // 选中气泡跟随当前 Tab(首次定位不开动画,避免从 0 宽度弹入)
@@ -2295,6 +2296,122 @@
       }
       if (name === 'overview') renderCar();  // 俯视图标注随舞台尺寸定位,重算一次
     });
+  }
+
+  /* ---------- 车辆控制 ---------- */
+
+  let ctlTemp = 21.5;  // 空调温度步进当前值(°C)
+
+  // 指令结果 toast:浮在 Tab 栏上方的玻璃胶囊,3 秒自动消失
+  let ctlToastTimer = null;
+  function ctlToast(text, ok) {
+    let t = $('#ctl-toast');
+    if (!t) {
+      t = el('div', 'ctl-toast');
+      t.id = 'ctl-toast';
+      document.body.appendChild(t);
+    }
+    t.textContent = text;
+    t.classList.toggle('err', !ok);
+    t.classList.add('show');
+    clearTimeout(ctlToastTimer);
+    ctlToastTimer = setTimeout(() => t.classList.remove('show'), 3200);
+  }
+
+  // 查询控制后端配置状态:未配置显示引导,已配置显示控制面板
+  async function loadControlStatus() {
+    try {
+      const st = await api('control/status');
+      const configured = !!st.configured;
+      $('#ctl-setup').hidden = configured;
+      $('#ctl-main').hidden = !configured;
+      $('#ctl-backend').textContent = configured
+        ? `指令后端:${st.backend}${st.vin_tail ? ` · VIN …${st.vin_tail}` : ''}`
+        : '';
+    } catch (e) { /* 401 会跳登录页;其他错误保留引导态 */ }
+  }
+
+  // 状态条:复用 overview 数据(车辆状态 / 电量 / 车内温度 / 空调),休眠时给唤醒提示
+  function renderCtlState() {
+    const box = $('#ctl-state');
+    const o = S.overview;
+    if (!box || !o) return;
+    box.textContent = '';
+    const lat = o.latest || {};
+    const badge = el('span', 'badge');
+    badge.dataset.state = o.state || 'unknown';
+    badge.append(el('span', 'dot'), el('span', '', STATE_LABEL[o.state] || o.state || '—'));
+    box.appendChild(badge);
+    const usable = lat.usable_battery_level != null ? Number(lat.usable_battery_level) : null;
+    if (usable !== null) {
+      const s = el('span');
+      s.append('电量 ', el('b', '', battVal(usable)));
+      box.appendChild(s);
+    }
+    if (lat.inside_temp != null) {
+      const s = el('span');
+      s.append('车内 ', el('b', '', `${Number(lat.inside_temp).toFixed(1)}°C`));
+      box.appendChild(s);
+    }
+    if (lat.is_climate_on != null) {
+      const s = el('span');
+      s.append('空调 ', el('b', '', lat.is_climate_on ? '开启' : '关闭'));
+      box.appendChild(s);
+    }
+    if (o.state === 'asleep' || o.state === 'offline') {
+      box.appendChild(el('span', 'ctl-sleep-hint',
+        '车辆休眠中:首条指令会先唤醒车辆,可能需要 10–30 秒'));
+    }
+  }
+
+  async function sendCmd(cmd, args, btn) {
+    if (btn.dataset.confirm && !confirm(btn.dataset.confirm)) return;
+    const label = btn.textContent.trim();
+    btn.disabled = true;
+    btn.classList.add('busy');
+    try {
+      const res = await fetch('/api/control/command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cmd, args }),
+      });
+      if (res.status === 401) { location.href = '/login?next=/'; return; }
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.ok) ctlToast(`✓ ${label}:已执行`, true);
+      else ctlToast(`${label}:${data.reason || data.detail || `HTTP ${res.status}`}`, false);
+    } catch (e) {
+      ctlToast(`${label}:网络错误`, false);
+    } finally {
+      btn.disabled = false;
+      btn.classList.remove('busy');
+    }
+  }
+
+  function initControl() {
+    // 指令按钮统一走事件委托;参数来自 data-args(静态 JSON)或 data-args-src(温度/滑杆当前值)
+    $('#page-control').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-cmd]');
+      if (!b) return;
+      let args = {};
+      if (b.dataset.args) {
+        try { args = JSON.parse(b.dataset.args); } catch (_) { /* 静态 JSON,忽略 */ }
+      }
+      if (b.dataset.argsSrc === 'temp') args = { driver_temp: ctlTemp };
+      if (b.dataset.argsSrc === 'limit') args = { percent: Number($('#ctl-limit').value) };
+      sendCmd(b.dataset.cmd, args, b);
+    });
+    $('#ctl-temp-minus').addEventListener('click', () => {
+      ctlTemp = Math.max(15, Math.round((ctlTemp - 0.5) * 2) / 2);
+      $('#ctl-temp-val').textContent = `${ctlTemp.toFixed(1)}°C`;
+    });
+    $('#ctl-temp-plus').addEventListener('click', () => {
+      ctlTemp = Math.min(30, Math.round((ctlTemp + 0.5) * 2) / 2);
+      $('#ctl-temp-val').textContent = `${ctlTemp.toFixed(1)}°C`;
+    });
+    $('#ctl-limit').addEventListener('input', (e) => {
+      $('#ctl-limit-val').textContent = `${e.target.value}%`;
+    });
+    loadControlStatus();
   }
 
   /* ---------- 初始化 ---------- */
@@ -2403,6 +2520,7 @@
     });
 
     initParking();
+    initControl();
 
     // 停车费:整卡可折叠,默认收起,展开状态跨会话记忆(与充电详情同款)
     const pkCard = $('#pk-card');

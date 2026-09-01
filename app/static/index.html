@@ -51,6 +51,10 @@
           <span class="meter-val" id="meter-mem-val">—</span>
         </span>
       </span>
+      <a class="acct-entry" href="/guide.html" title="车辆控制接入指南:注册 Tesla 开发者与配对虚拟钥匙">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm8 1.5V8h4.5L14 3.5zM8 12h8v1.6H8V12zm0 3.4h8v1.6H8v-1.6z"/></svg>
+        接入文档
+      </a>
       <a class="acct-entry" href="/account.html" title="账号管理 / Tesla 授权指引">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5zm0 2c-4 0-8 2-8 5v3h16v-3c0-3-4-5-8-5z"/></svg>
         个人中心
@@ -371,6 +375,91 @@
   </div>
   </section>
 
+  <!-- ===== 分页 6:控制 ===== -->
+  <section class="page" id="page-control">
+  <div class="grid">
+    <div class="card col-12">
+      <div class="card-head">
+        <div>
+          <h2>车辆控制</h2>
+          <div class="card-sub">指令经你配置的 Tesla 指令后端签名后下发 · 敏感操作二次确认 · <a href="/guide.html">接入文档</a></div>
+        </div>
+        <div class="mini-stats" id="ctl-backend"></div>
+      </div>
+
+      <!-- 车辆当前状态条(数据来自 TeslaMate 上报) -->
+      <div class="ctl-state" id="ctl-state"></div>
+
+      <!-- 未配置引导 -->
+      <div class="ctl-setup" id="ctl-setup" hidden>
+        <div class="ctl-setup-icon">🔑</div>
+        <h3>控制功能尚未接入</h3>
+        <p>面板通过「指令后端」向车辆下发已签名的控制指令。<br>
+           按接入文档完成注册与虚拟钥匙配对,在 .env 填入后端地址与令牌后重启即可启用。</p>
+        <a class="btn" href="/guide.html">查看接入文档</a>
+      </div>
+
+      <div id="ctl-main" hidden>
+        <div class="ctl-groups">
+          <div class="ctl-group">
+            <h3>车门与安全</h3>
+            <div class="ctl-grid">
+              <button class="ctl-btn" data-cmd="door_lock"><i>🔒</i>锁车</button>
+              <button class="ctl-btn warn" data-cmd="door_unlock" data-confirm="确认解锁车辆?解锁后车门可直接拉开。"><i>🔓</i>解锁</button>
+              <button class="ctl-btn" data-cmd="sentry_mode" data-args="{&quot;on&quot;:true}"><i>🛡</i>哨兵 开</button>
+              <button class="ctl-btn" data-cmd="sentry_mode" data-args="{&quot;on&quot;:false}"><i>🛡</i>哨兵 关</button>
+              <button class="ctl-btn" data-cmd="flash_lights"><i>💡</i>闪灯</button>
+              <button class="ctl-btn" data-cmd="honk_horn"><i>📣</i>鸣笛</button>
+            </div>
+          </div>
+
+          <div class="ctl-group">
+            <h3>空调</h3>
+            <div class="ctl-grid two">
+              <button class="ctl-btn" data-cmd="auto_conditioning_start"><i>❄️</i>开启空调</button>
+              <button class="ctl-btn" data-cmd="auto_conditioning_stop"><i>⏹</i>关闭空调</button>
+            </div>
+            <div class="ctl-row">
+              <span class="ctl-row-label">温度</span>
+              <button class="ctl-step" id="ctl-temp-minus" aria-label="降温">−</button>
+              <b class="ctl-val" id="ctl-temp-val">21.5°C</b>
+              <button class="ctl-step" id="ctl-temp-plus" aria-label="升温">+</button>
+              <button class="ctl-apply" data-cmd="set_temps" data-args-src="temp">应用</button>
+            </div>
+          </div>
+
+          <div class="ctl-group">
+            <h3>充电</h3>
+            <div class="ctl-grid">
+              <button class="ctl-btn" data-cmd="charge_start"><i>⚡</i>开始充电</button>
+              <button class="ctl-btn" data-cmd="charge_stop"><i>⏹</i>停止充电</button>
+              <button class="ctl-btn" data-cmd="charge_port_door_open"><i>🔌</i>开充电口</button>
+              <button class="ctl-btn" data-cmd="charge_port_door_close"><i>🔌</i>关充电口</button>
+            </div>
+            <div class="ctl-row">
+              <span class="ctl-row-label">充电上限</span>
+              <input type="range" id="ctl-limit" min="50" max="100" step="5" value="80">
+              <b class="ctl-val" id="ctl-limit-val">80%</b>
+              <button class="ctl-apply" data-cmd="set_charge_limit" data-args-src="limit">设置</button>
+            </div>
+          </div>
+
+          <div class="ctl-group">
+            <h3>车身</h3>
+            <div class="ctl-grid">
+              <button class="ctl-btn" data-cmd="window_control" data-args="{&quot;command&quot;:&quot;vent&quot;}"><i>🪟</i>车窗通风</button>
+              <button class="ctl-btn" data-cmd="window_control" data-args="{&quot;command&quot;:&quot;close&quot;}"><i>🪟</i>关闭车窗</button>
+              <button class="ctl-btn warn" data-cmd="actuate_trunk" data-args="{&quot;which_trunk&quot;:&quot;front&quot;}" data-confirm="确认开启前备箱?"><i>🧳</i>前备箱</button>
+              <button class="ctl-btn warn" data-cmd="actuate_trunk" data-args="{&quot;which_trunk&quot;:&quot;rear&quot;}" data-confirm="确认开启后备箱?"><i>🎒</i>后备箱</button>
+            </div>
+          </div>
+        </div>
+        <p class="ctl-note">休眠中的车辆会先被唤醒,首条指令可能需要 10–30 秒;唤醒与指令按 Tesla 计费(个人额度内免费)。</p>
+      </div>
+    </div>
+  </div>
+  </section>
+
   <div class="filter-row">
     <div class="seg" id="range-seg" role="group" aria-label="时间范围">
       <button data-days="1">24 小时</button>
@@ -412,6 +501,10 @@
   <button class="tab" role="tab" data-page="vehicle" aria-selected="false">
     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3.5A9.5 9.5 0 0 0 2.5 13c0 2.6 1 5 2.7 6.7l1.4-1.4A7.5 7.5 0 1 1 19.5 13c0 2-.8 3.9-2.1 5.3l1.4 1.4a9.5 9.5 0 0 0 2.7-6.7A9.5 9.5 0 0 0 12 3.5z"/><path d="M12 15.2a1.7 1.7 0 0 1-.6-3.3l4.6-3-3 4.6a1.7 1.7 0 0 1-1 1.7z"/></svg>
     <span>车况</span>
+  </button>
+  <button class="tab" role="tab" data-page="control" aria-selected="false">
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M10.8 2.5a6 6 0 0 0-6 6c0 2.3 1.3 4.3 3.2 5.3L6.6 15v2.2h2v2.1h3.2v-2.1h2V15h-2.1l-.5-.5a6 6 0 1 0-.5-12zm0 3.7a2.3 2.3 0 1 1-2.3 2.3 2.3 2.3 0 0 1 2.3-2.3z"/></svg>
+    <span>控制</span>
   </button>
 </nav>
 
