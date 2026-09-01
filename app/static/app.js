@@ -13,6 +13,7 @@
     cycles: null,
     cycleIdx: 0,
     sessions: null,
+    delivery: null,   // 提车日期 YYYY-MM-DD(null = 未设置)
     timer: null,
   };
 
@@ -1315,6 +1316,7 @@
     const outT = lat && lat.outside_temp != null ? Number(lat.outside_temp) : null;
     $('#car-center-temp').textContent = inT === null ? '—' : `车内 ${fmtNum(inT, 1)}°`;
     $('#car-temp-val').textContent = outT === null ? '—' : `${fmtNum(outT, 1)}°`;
+    renderCompanion();
 
     // 车辆顶部:本周期平均能耗细长条(官方能耗=额定折算系数,作标点)
     const effG = $('#car-eff');
@@ -1872,6 +1874,75 @@
     });
   }
 
+  /* ---------- 陪伴天数(提车日期,存 panel_manual settings) ---------- */
+
+  function renderCompanion() {
+    const t = $('#car-companion');
+    if (!t) return;
+    if (!S.delivery) {
+      t.textContent = '点这里设置提车日期';
+      t.classList.add('is-empty');
+      return;
+    }
+    t.classList.remove('is-empty');
+    // 提车当天算第 1 天(本地时区)
+    const [y, m, d] = S.delivery.split('-').map(Number);
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const days = Math.max(1, Math.round((today - new Date(y, m - 1, d)) / 86400000) + 1);
+    t.textContent = `已陪伴 ${days} 天`;
+    t.setAttribute('aria-label', `提车日期 ${S.delivery},已陪伴 ${days} 天,点击修改`);
+  }
+
+  function initCompanion() {
+    const t = $('#car-companion');
+    const pop = $('#companion-pop');
+    if (!t || !pop) return;
+    const dateInp = $('#companion-date');
+    const openPop = () => {
+      dateInp.value = S.delivery || '';
+      dateInp.max = (() => {  // 不可选未来日期
+        const n = new Date();
+        const p = (v) => String(v).padStart(2, '0');
+        return `${n.getFullYear()}-${p(n.getMonth() + 1)}-${p(n.getDate())}`;
+      })();
+      $('#companion-clear').hidden = !S.delivery;
+      pop.hidden = false;
+      dateInp.focus();
+    };
+    const closePop = () => { pop.hidden = true; };
+    t.addEventListener('click', openPop);
+    t.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPop(); }
+    });
+    $('#companion-cancel').addEventListener('click', closePop);
+    pop.addEventListener('click', (e) => { if (e.target === pop) closePop(); });
+    const submit = async (date) => {
+      const btn = $('#companion-save');
+      btn.disabled = true;
+      try {
+        const r = await fetchJSON('/api/vehicle/delivery', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ date }),
+        });
+        S.delivery = r.date;
+        renderCompanion();
+        closePop();
+      } catch (err) {
+        console.error(err);
+        dateInp.focus();
+      } finally {
+        btn.disabled = false;
+      }
+    };
+    $('#companion-save').addEventListener('click', () => {
+      if (!dateInp.value) { dateInp.focus(); return; }
+      submit(dateInp.value);
+    });
+    $('#companion-clear').addEventListener('click', () => submit(''));
+  }
+
   function initParking() {
     const dateInp = $('#pk-date');
     if (!dateInp) return;
@@ -2117,7 +2188,7 @@
     try {
       const o = await api('overview');
       if (S.carId === null) S.carId = o.car_id;
-      const [daily, chg, routes, act, eff, tpms, sys, health, sessions, cyc, temp, tpms24, pk] = await Promise.all([
+      const [daily, chg, routes, act, eff, tpms, sys, health, sessions, cyc, temp, tpms24, pk, del] = await Promise.all([
         api(`drives/daily?days=${S.days}`),
         api('charging/summary?limit=12'),
         api(`routes?days=${S.days}`),
@@ -2131,6 +2202,7 @@
         api(`temp/trend?days=${S.days}`),
         api('tpms/trend?days=1'),
         api('parking/fees'),
+        api('vehicle/delivery'),
       ]);
       S.overview = {
         ...o,
@@ -2148,6 +2220,7 @@
       S.sessions = sessions;
       S.cycles = cyc;
       S.parking = pk;
+      S.delivery = del.date;
       $('#state-badge').dataset.state = 'unknown';
       renderSys(sys);
       renderHeader();
@@ -2572,6 +2645,7 @@
     });
 
     initParking();
+    initCompanion();
     initControl();
 
     // 停车费:整卡可折叠,默认收起,展开状态跨会话记忆(与充电详情同款)

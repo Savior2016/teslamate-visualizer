@@ -1667,9 +1667,11 @@ def logout():
 from .backup import router as backup_router
 from .control import router as control_router
 from .parking import router as parking_router
+from .vehicle import router as vehicle_router
 app.include_router(backup_router)   # 须在 app.mount("/") 之前注册
 app.include_router(control_router)
 app.include_router(parking_router)
+app.include_router(vehicle_router)
 
 app.mount("/", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static"),
                            html=True), name="static")

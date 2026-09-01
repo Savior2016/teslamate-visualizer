@@ -159,6 +159,8 @@
               <!-- 玻璃顶中央:车型徽章(非 Y L 回退文字),下方车内温度 -->
               <image id="car-badge" x="102" y="239.5" width="136" height="15.3" href="/model-yl-badge.png"/>
               <text id="car-center-model" class="car-center-model" x="170" y="258" style="display:none">—</text>
+              <!-- 车型下方空白处:陪伴天数(点击设置提车日期) -->
+              <text id="car-companion" class="car-companion" x="170" y="278" role="button" tabindex="0">—</text>
               <text id="car-center-temp" class="car-center-temp" x="170" y="296">—</text>
               <!-- 后风挡:车外温度 -->
               <text id="car-temp-val" class="car-temp-val" x="170" y="410">—</text>
@@ -575,6 +577,19 @@
     <span>控制</span>
   </button>
 </nav>
+
+<!-- 提车日期设置弹层(总览页车图「陪伴天数」点击唤起) -->
+<div class="companion-pop" id="companion-pop" hidden>
+  <div class="companion-card" role="dialog" aria-label="设置提车日期">
+    <h3>设置提车日期</h3>
+    <input type="date" id="companion-date">
+    <div class="companion-actions">
+      <button id="companion-clear" class="ghost" hidden>清除</button>
+      <button id="companion-cancel" class="ghost">取消</button>
+      <button id="companion-save">保存</button>
+    </div>
+  </div>
+</div>
 
 <script src="/echarts.min.js"></script>
 <script src="/leaflet.js"></script>
