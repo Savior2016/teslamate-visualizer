@@ -2254,6 +2254,17 @@
   const PAGE_IDS = ['overview', 'charging', 'drives', 'activity', 'vehicle'];
   let mapShown = false;  // 行程页首次显示时需 invalidateSize + 重新 fitBounds
 
+  // 选中气泡跟随当前 Tab(首次定位不开动画,避免从 0 宽度弹入)
+  function placeTabBubble() {
+    const bar = $('#tabbar');
+    const btn = bar && bar.querySelector('.tab.on');
+    const bubble = $('#tab-bubble');
+    if (!btn || !bubble) return;
+    bubble.style.left = btn.offsetLeft + 'px';
+    bubble.style.width = btn.offsetWidth + 'px';
+    bubble.classList.remove('no-anim');
+  }
+
   function switchTab(name, save) {
     if (!PAGE_IDS.includes(name)) name = 'overview';
     if (save !== false) localStorage.setItem('ttv-tab', name);
@@ -2264,6 +2275,7 @@
       t.classList.toggle('on', on);
       t.setAttribute('aria-selected', on ? 'true' : 'false');
     });
+    placeTabBubble();
     // 隐藏页里的 ECharts / Leaflet 尺寸为 0,显示后要重算
     requestAnimationFrame(() => {
       const sec = document.getElementById('page-' + name);
@@ -2423,6 +2435,7 @@
       Object.values(charts).forEach((c) => c && c.resize());
       if (map) map.invalidateSize();
       renderCar();  // 引线与标注按舞台实际尺寸定位,需随布局重算
+      placeTabBubble();  // 气泡宽度随 Tab 布局变化
     });
 
     refresh();

@@ -1525,7 +1525,8 @@ footer a { color: var(--text-muted); }
 .page { display: none; }
 .page.active { display: block; }
 
-/* 底部居中浮动 Tab 栏(iOS 26 液态玻璃风格):半透明 + 高斯模糊 + 饱和度提升 + 内高光 */
+/* 底部居中浮动 Tab 栏(iOS 26 液态玻璃风格):
+   高通透 + 强模糊/饱和度/亮度提升 + 顶部边缘高光 + 斜向镜面扫光 + 选中气泡滑动回弹 */
 .tabbar {
   position: fixed;
   left: 50%;
@@ -1536,21 +1537,55 @@ footer a { color: var(--text-muted); }
   gap: 2px;
   padding: 6px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--surface-1) 58%, transparent);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid var(--border);
-  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.34),
-              inset 0 1px 0 rgba(255, 255, 255, 0.16),
-              inset 0 -1px 0 rgba(0, 0, 0, 0.10);
+  overflow: hidden;
+  background: color-mix(in srgb, var(--surface-1) 40%, transparent);
+  -webkit-backdrop-filter: blur(24px) saturate(200%) brightness(1.1);
+  backdrop-filter: blur(24px) saturate(200%) brightness(1.1);
+  border: 0.5px solid color-mix(in srgb, var(--text-primary) 16%, transparent);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.38),
+              inset 0 1px 1px rgba(255, 255, 255, 0.30),
+              inset 0 -1px 1px rgba(0, 0, 0, 0.18);
+}
+/* 斜向镜面扫光(液态玻璃的反射高光) */
+.tabbar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(115deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.03) 28%, transparent 45%);
 }
 :root[data-theme="light"] .tabbar {
-  background: color-mix(in srgb, var(--surface-1) 66%, transparent);
-  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.14),
-              inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  background: color-mix(in srgb, var(--surface-1) 52%, transparent);
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.16),
+              inset 0 1px 1px rgba(255, 255, 255, 0.85),
+              inset 0 -1px 1px rgba(0, 0, 0, 0.05);
+}
+:root[data-theme="light"] .tabbar::before {
+  background: linear-gradient(115deg, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0.12) 28%, transparent 45%);
 }
 
+/* 选中项滑动气泡:玻璃透镜质感,切换时带回弹滑动(iOS 26 式) */
+.tab-bubble {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 0;
+  width: 0;
+  border-radius: 999px;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--series-1) 26%, transparent);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.38),
+              inset 0 -1px 1px rgba(0, 0, 0, 0.08),
+              0 4px 16px color-mix(in srgb, var(--series-1) 42%, transparent);
+  transition: left 0.45s cubic-bezier(0.22, 1.35, 0.36, 1),
+              width 0.45s cubic-bezier(0.22, 1.35, 0.36, 1);
+}
+.tab-bubble.no-anim { transition: none; }
+
 .tabbar .tab {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1566,18 +1601,12 @@ footer a { color: var(--text-muted); }
   color: var(--text-secondary);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  transition: color 0.18s ease, background 0.25s ease, box-shadow 0.25s ease, transform 0.12s ease;
+  transition: color 0.18s ease, transform 0.12s ease;
 }
 .tabbar .tab svg { width: 21px; height: 21px; display: block; }
 .tabbar .tab:hover { color: var(--text-primary); }
 .tabbar .tab:active { transform: scale(0.92); }
-/* 选中项:玻璃气泡(品牌蓝半透明 + 顶部内高光 + 外发光) */
-.tabbar .tab.on {
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--series-1) 24%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22),
-              0 2px 12px color-mix(in srgb, var(--series-1) 38%, transparent);
-}
+.tabbar .tab.on { color: var(--text-primary); font-weight: 600; }
 
 /* ===== 响应式:平板 / 手机 ===== */
 @media (max-width: 900px) {

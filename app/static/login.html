@@ -15,22 +15,30 @@
       background: radial-gradient(60% 45% at 50% 30%, color-mix(in srgb, var(--series-1) 9%, transparent), transparent 70%);
     }
 
-    /* 液态玻璃卡片:与底部分页导航同一材质语言 */
+    /* 液态玻璃卡片(iOS 26 风格):高通透 + 强模糊/饱和度 + 边缘高光 + 斜向镜面扫光 */
     .login-card {
       position: relative; width: 100%; max-width: 360px; text-align: center;
-      padding: 40px 32px 32px; border-radius: 24px;
-      background: color-mix(in srgb, var(--surface-1) 62%, transparent);
-      -webkit-backdrop-filter: blur(22px) saturate(170%);
-      backdrop-filter: blur(22px) saturate(170%);
-      border: 1px solid var(--border);
-      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.28),
-                  inset 0 1px 0 rgba(255, 255, 255, 0.14),
-                  inset 0 -1px 0 rgba(0, 0, 0, 0.06);
+      padding: 40px 32px 32px; border-radius: 24px; overflow: hidden;
+      background: color-mix(in srgb, var(--surface-1) 46%, transparent);
+      -webkit-backdrop-filter: blur(26px) saturate(200%) brightness(1.1);
+      backdrop-filter: blur(26px) saturate(200%) brightness(1.1);
+      border: 0.5px solid color-mix(in srgb, var(--text-primary) 16%, transparent);
+      box-shadow: 0 24px 64px rgba(0, 0, 0, 0.34),
+                  inset 0 1px 1px rgba(255, 255, 255, 0.28),
+                  inset 0 -1px 1px rgba(0, 0, 0, 0.14);
+    }
+    .login-card::before {
+      content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+      background: linear-gradient(115deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.03) 30%, transparent 48%);
     }
     :root[data-theme="light"] .login-card {
-      background: color-mix(in srgb, var(--surface-1) 72%, transparent);
-      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.12),
-                  inset 0 1px 0 rgba(255, 255, 255, 0.65);
+      background: color-mix(in srgb, var(--surface-1) 58%, transparent);
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.14),
+                  inset 0 1px 1px rgba(255, 255, 255, 0.85),
+                  inset 0 -1px 1px rgba(0, 0, 0, 0.05);
+    }
+    :root[data-theme="light"] .login-card::before {
+      background: linear-gradient(115deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.12) 30%, transparent 48%);
     }
 
     .login-logo { width: 84px; height: auto; color: var(--text-primary); margin-bottom: 10px; }
@@ -68,10 +76,9 @@
 </head>
 <body>
   <main class="login-card">
-    <!-- Tesla 徽标(T 字标 + 上方电机截面弧线),随主题变色 -->
-    <svg class="login-logo" viewBox="0 0 100 124" fill="currentColor" role="img" aria-label="Tesla">
-      <path d="M5 16 C28 3 72 3 95 16 C72 7 28 7 5 16 Z"/>
-      <path d="M50 28 L85 28 C86 33 88 38 91 42 L57 42 L57 110 L50 118 L43 110 L43 42 L9 42 C12 38 14 33 15 28 Z"/>
+    <!-- Tesla 官方 T 徽标(simple-icons 官方矢量路径),随主题变色 -->
+    <svg class="login-logo" viewBox="0 0 24 24" fill="currentColor" role="img" aria-label="Tesla">
+      <path d="M12 5.362l2.475-3.026s4.245.09 8.471 2.054c-1.082 1.636-3.231 2.438-3.231 2.438-.146-1.439-1.154-1.79-4.354-1.79L12 24 8.619 5.034c-3.18 0-4.188.354-4.335 1.792 0 0-2.146-.795-3.229-2.43C5.28 2.431 9.525 2.34 9.525 2.34L12 5.362l-.004.002H12v-.002zm0-3.899c3.415-.03 7.326.528 11.328 2.28.535-.968.672-1.395.672-1.395C19.625.612 15.528.015 12 0 8.472.015 4.375.61 0 2.349c0 0 .195.525.672 1.396C4.674 1.989 8.585 1.435 12 1.46v.003z"/>
     </svg>
     <h1 class="login-title">TESLA Home</h1>
     <p class="login-sub">TeslaMate 遥测可视化面板</p>
