@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0d0d0d">
+  <title>登录 · TESLA Home</title>
+  <link rel="stylesheet" href="/style.css">
+  <script>document.documentElement.dataset.theme = localStorage.getItem('ttv-theme') || 'dark';</script>
+  <style>
+    body { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 16px; }
+    /* 背景氛围光:品牌蓝极低透明度径向渐变,不喧宾夺主 */
+    body::before {
+      content: ""; position: fixed; inset: 0; pointer-events: none;
+      background: radial-gradient(60% 45% at 50% 30%, color-mix(in srgb, var(--series-1) 9%, transparent), transparent 70%);
+    }
+
+    /* 液态玻璃卡片:与底部分页导航同一材质语言 */
+    .login-card {
+      position: relative; width: 100%; max-width: 360px; text-align: center;
+      padding: 40px 32px 32px; border-radius: 24px;
+      background: color-mix(in srgb, var(--surface-1) 62%, transparent);
+      -webkit-backdrop-filter: blur(22px) saturate(170%);
+      backdrop-filter: blur(22px) saturate(170%);
+      border: 1px solid var(--border);
+      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.28),
+                  inset 0 1px 0 rgba(255, 255, 255, 0.14),
+                  inset 0 -1px 0 rgba(0, 0, 0, 0.06);
+    }
+    :root[data-theme="light"] .login-card {
+      background: color-mix(in srgb, var(--surface-1) 72%, transparent);
+      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.12),
+                  inset 0 1px 0 rgba(255, 255, 255, 0.65);
+    }
+
+    .login-logo { width: 84px; height: auto; color: var(--text-primary); margin-bottom: 10px; }
+    .login-title {
+      margin: 0; font-size: 22px; font-weight: 650; letter-spacing: -0.01em;
+      font-family: 'Universal Sans Display', system-ui, sans-serif;
+    }
+    .login-sub { margin: 6px 0 26px; font-size: 13px; color: var(--text-muted); }
+
+    .login-field { margin-bottom: 12px; }
+    .login-field input {
+      width: 100%; font: inherit; font-size: 15px;
+      color: var(--text-primary); background: var(--page);
+      border: 1px solid var(--border); border-radius: 10px; padding: 11px 14px;
+    }
+    .login-field input:focus { outline: 2px solid var(--series-1); outline-offset: -1px; }
+    .login-field input::placeholder { color: var(--text-muted); }
+
+    .login-btn {
+      width: 100%; margin-top: 6px; font: inherit; font-size: 15px; font-weight: 600;
+      cursor: pointer; color: #fff; background: var(--seq-blue-500);
+      border: 0; border-radius: 10px; padding: 11px 0;
+      transition: background 0.15s ease, opacity 0.15s ease;
+    }
+    .login-btn:hover { background: var(--seq-blue-600); }
+    .login-btn:disabled { opacity: 0.55; cursor: default; }
+
+    .login-msg { min-height: 1.3em; margin-top: 12px; font-size: 13px; color: #d03b3b; }
+
+    .login-foot {
+      margin-top: 28px; font-size: 11px; line-height: 1.7; color: var(--text-muted);
+      position: relative;
+    }
+  </style>
+</head>
+<body>
+  <main class="login-card">
+    <!-- Tesla 徽标(T 字标 + 上方电机截面弧线),随主题变色 -->
+    <svg class="login-logo" viewBox="0 0 100 124" fill="currentColor" role="img" aria-label="Tesla">
+      <path d="M5 16 C28 3 72 3 95 16 C72 7 28 7 5 16 Z"/>
+      <path d="M50 28 L85 28 C86 33 88 38 91 42 L57 42 L57 110 L50 118 L43 110 L43 42 L9 42 C12 38 14 33 15 28 Z"/>
+    </svg>
+    <h1 class="login-title">TESLA Home</h1>
+    <p class="login-sub">TeslaMate 遥测可视化面板</p>
+    <form id="login-form" autocomplete="on">
+      <div class="login-field">
+        <input type="text" id="login-user" placeholder="用户名" autocomplete="username" maxlength="32" required>
+      </div>
+      <div class="login-field">
+        <input type="password" id="login-pass" placeholder="密码" autocomplete="current-password" required>
+      </div>
+      <button class="login-btn" id="login-btn" type="submit">登 录</button>
+      <div class="login-msg" id="login-msg" role="alert"></div>
+    </form>
+  </main>
+  <p class="login-foot">徽标与车型素材版权归 Tesla, Inc. 所有 · 数据源 TeslaMate</p>
+  <script src="/login.js"></script>
+</body>
+</html>

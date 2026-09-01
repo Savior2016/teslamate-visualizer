@@ -22,6 +22,7 @@
       display: inline-flex; align-items: center; gap: 6px;
     }
     .acct-user-chip svg { width: 13px; height: 13px; fill: currentColor; }
+    #logout-btn { padding: 4px 12px; font-size: 12px; border-radius: 999px; }
     .acct-wrap .card { margin-bottom: 14px; }
 
     /* Tesla 授权状态横幅 */
@@ -124,6 +125,7 @@
       <svg viewBox="0 0 24 24"><path d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5zm0 2c-4 0-8 2-8 5v3h16v-3c0-3-4-5-8-5z"/></svg>
       <span id="acct-user-name">…</span>
     </span>
+    <button class="btn ghost" id="logout-btn" type="button">退出登录</button>
   </header>
 
   <!-- Tesla 账号授权:状态 + 可视化指引 -->

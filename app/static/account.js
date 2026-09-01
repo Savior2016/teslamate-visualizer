@@ -119,6 +119,10 @@
 
   async function api(path, opts) {
     const resp = await fetch(path, opts);
+    if (resp.status === 401) {  // 会话失效:回登录页
+      location.href = '/login?next=/account.html';
+      throw new Error('未登录');
+    }
     if (!resp.ok) {
       let detail = `请求失败(${resp.status})`;
       try { detail = (await resp.json()).detail || detail; } catch (_) { /* 忽略 */ }
@@ -126,6 +130,12 @@
     }
     return resp.json();
   }
+
+  // 退出登录:清除会话 Cookie 后回登录页
+  $('logout-btn').onclick = async () => {
+    try { await fetch('/api/logout', { method: 'POST' }); } catch (_) { /* 忽略 */ }
+    location.href = '/login';
+  };
 
   let pollTimer = null;
   async function loadStatus() {
@@ -156,8 +166,11 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ current_password: cur, new_password: nw }),
       });
-      msg(m, '✓ 修改成功,即将刷新页面,请用新密码重新登录', true);
-      setTimeout(() => location.reload(), 2500);
+      msg(m, '✓ 修改成功,即将回到登录页,请用新密码重新登录', true);
+      setTimeout(async () => {
+        try { await fetch('/api/logout', { method: 'POST' }); } catch (_) { /* 忽略 */ }
+        location.href = '/login';
+      }, 1800);
     } catch (e) {
       msg(m, e.message, false);
     }

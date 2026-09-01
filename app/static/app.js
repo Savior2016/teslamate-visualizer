@@ -2167,6 +2167,10 @@
 
   async function fetchJSON(url, opts) {
     const res = await fetch(url, opts);
+    if (res.status === 401) {  // 会话失效:回登录页,登录后原路返回
+      location.href = '/login?next=' + encodeURIComponent(location.pathname);
+      throw new Error('unauthorized');
+    }
     if (!res.ok) throw new Error(`${url} → HTTP ${res.status}`);
     return res.json();
   }
@@ -2245,6 +2249,42 @@
     renderEfficiency(); renderTpms(); renderCar(); renderSessions(); renderChargers(); renderCsBatt(); renderTemp(); renderParking();
   }
 
+  /* ---------- 功能分页(底部液态玻璃 Tab 栏) ---------- */
+
+  const PAGE_IDS = ['overview', 'charging', 'drives', 'activity', 'vehicle'];
+  let mapShown = false;  // 行程页首次显示时需 invalidateSize + 重新 fitBounds
+
+  function switchTab(name, save) {
+    if (!PAGE_IDS.includes(name)) name = 'overview';
+    if (save !== false) localStorage.setItem('ttv-tab', name);
+    document.querySelectorAll('.page').forEach((p) =>
+      p.classList.toggle('active', p.id === 'page-' + name));
+    document.querySelectorAll('.tabbar .tab').forEach((t) => {
+      const on = t.dataset.page === name;
+      t.classList.toggle('on', on);
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    // 隐藏页里的 ECharts / Leaflet 尺寸为 0,显示后要重算
+    requestAnimationFrame(() => {
+      const sec = document.getElementById('page-' + name);
+      if (sec) Object.values(charts).forEach((c) => {
+        if (c && sec.contains(c.getDom())) c.resize();
+      });
+      if (name === 'drives' && map) {
+        map.invalidateSize();
+        if (!mapShown) {  // 首次显示:此前 fitBounds 基于 0 尺寸,按全部轨迹重算
+          mapShown = true;
+          let b = null;
+          Object.values(routesLayers).forEach((l) => {
+            b = b ? b.extend(l.getBounds()) : l.getBounds();
+          });
+          if (b) map.fitBounds(b, { padding: [30, 30] });
+        }
+      }
+      if (name === 'overview') renderCar();  // 俯视图标注随舞台尺寸定位,重算一次
+    });
+  }
+
   /* ---------- 初始化 ---------- */
 
   function init() {
@@ -2261,6 +2301,13 @@
     charts.wfr = echarts.init($('#chart-wfr'));
     charts.wrl = echarts.init($('#chart-wrl'));
     charts.wrr = echarts.init($('#chart-wrr'));
+
+    // 功能分页:底部 Tab 栏点击切换,记忆上次所在页
+    $('#tabbar').addEventListener('click', (e) => {
+      const b = e.target.closest('.tab');
+      if (b) switchTab(b.dataset.page);
+    });
+    switchTab(localStorage.getItem('ttv-tab') || 'overview', false);
 
     // 车辆总览:电量 % / 度数 kWh / 里程 km 三态切换(本卡片独立,持久化)
     const carSeg = $('#car-mode-seg');

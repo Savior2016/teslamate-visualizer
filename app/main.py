@@ -7,6 +7,7 @@
 import base64
 import bisect
 import hashlib
+import hmac
 import json
 import os
 import re
@@ -21,7 +22,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
@@ -39,8 +40,8 @@ DISPLAY_TZ = os.environ.get("DISPLAY_TZ", "Asia/Shanghai")
 if not re.fullmatch(r"[A-Za-z_0-9+/.-]{1,64}", DISPLAY_TZ):
     DISPLAY_TZ = "Asia/Shanghai"
 
-# HTTP Basic Auth:账号存 /data/users.json(pbkdf2_sha256 哈希),动态读取(mtime 缓存),
-# 个人中心改密码即刻生效、无需重启。
+# 账号体系:存 /data/users.json(pbkdf2_sha256 哈希),动态读取(mtime 缓存),
+# 个人中心改密码即刻生效、无需重启;网页登录(会话 Cookie)与 HTTP Basic Auth 共用此表。
 # 首次启动时文件不存在,则用环境变量播种:VISUALIZER_USERS="user1:pass1,user2:pass2"
 # (密码可含冒号,取首个冒号分割);之后改动环境变量不再生效。
 USERS_FILE = os.environ.get("USERS_FILE", "/data/users.json")
@@ -121,6 +122,76 @@ _failures: dict[str, list[float]] = defaultdict(list)
 FAIL_WINDOW = 600.0
 FAIL_THRESHOLD = 10
 LOCKOUT = 300.0
+
+
+def _client_ip(request: Request) -> str:
+    """真实客户端 IP:应用只在 Caddy 反代之后可达(8080 仅绑 127.0.0.1),
+    取 Caddy 写入的 X-Forwarded-For 首段,否则所有访客共享一个限流计数,
+    扫描器一探测就全站 429。"""
+    xff = request.headers.get("X-Forwarded-For", "")
+    return xff.split(",")[0].strip() or (request.client.host if request.client else "?")
+
+
+def _is_locked(ip: str) -> bool:
+    """该 IP 是否处于登录失败锁定期(顺带清理过期失败记录)。"""
+    now = time.time()
+    fails = [t for t in _failures[ip] if now - t < FAIL_WINDOW]
+    _failures[ip] = fails
+    return len(fails) >= FAIL_THRESHOLD and now - fails[-FAIL_THRESHOLD] < LOCKOUT
+
+
+def _record_fail(ip: str) -> None:
+    _failures[ip].append(time.time())
+
+
+# 网页登录会话:HMAC 签名的 Cookie('base64url(user:expiry).hex签名'),
+# 密钥首次启动自动生成并持久化到 /data/.session_secret(0600),重启不失效。
+SESSION_COOKIE = "ttv_session"
+SESSION_TTL = 30 * 86400  # 30 天
+SESSION_SECRET_FILE = os.environ.get("SESSION_SECRET_FILE", "/data/.session_secret")
+_session_secret: bytes | None = None
+
+
+def _get_session_secret() -> bytes:
+    global _session_secret
+    if _session_secret is None:
+        try:
+            with open(SESSION_SECRET_FILE, "r", encoding="ascii") as f:
+                _session_secret = bytes.fromhex(f.read().strip())
+        except (OSError, ValueError):
+            _session_secret = secrets.token_bytes(32)
+            try:
+                os.makedirs(os.path.dirname(SESSION_SECRET_FILE) or ".", exist_ok=True)
+                fd = os.open(SESSION_SECRET_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+                with os.fdopen(fd, "w", encoding="ascii") as f:
+                    f.write(_session_secret.hex())
+            except OSError:
+                pass  # 文件不可写时仅本次进程内有效,重启后所有会话失效
+    return _session_secret
+
+
+def _make_session(user: str) -> str:
+    payload = base64.urlsafe_b64encode(
+        f"{user}:{int(time.time()) + SESSION_TTL}".encode("utf-8")).decode("ascii")
+    sig = hmac.new(_get_session_secret(), payload.encode("ascii"), hashlib.sha256).hexdigest()
+    return f"{payload}.{sig}"
+
+
+def _session_user(token: str) -> str:
+    """校验会话 Cookie,通过且账号仍存在时返回用户名,否则返回空串。"""
+    payload, sep, sig = token.rpartition(".")
+    if not sep:
+        return ""
+    expect = hmac.new(_get_session_secret(), payload.encode("ascii"), hashlib.sha256).hexdigest()
+    if not secrets.compare_digest(sig, expect):
+        return ""
+    try:
+        user, exp = base64.urlsafe_b64decode(payload.encode("ascii")).decode("utf-8").rsplit(":", 1)
+        if int(exp) < time.time():
+            return ""
+    except (ValueError, UnicodeDecodeError):
+        return ""
+    return user if user in auth_users() else ""
 
 # 每次理想续航(km)对应的可用电量(kWh),用于估算行程能耗;
 # 当充电历史足够时按实际数据自动校准。
@@ -279,37 +350,49 @@ app = FastAPI(title="TeslaMate Telemetry Visualizer", lifespan=lifespan)
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 
+# 无需认证即可访问的路径:健康检查、地图瓦片代理、登录页及其静态资源、登录/登出接口
+_AUTH_EXACT = {"/api/health", "/api/login", "/api/logout", "/login", "/login.js", "/style.css"}
+_AUTH_PREFIX = ("/api/tiles/", "/fonts/")
+
+
 @app.middleware("http")
 async def auth_and_headers(request: Request, call_next):
-    """HTTP Basic Auth + 基础安全响应头(健康检查与地图瓦片代理除外)。"""
+    """登录认证 + 基础安全响应头。
+
+    网页登录(会话 Cookie)为主;HTTP Basic Auth 保留兼容 curl / 第三方 API 访问。
+    未认证:API 路径返回 401 JSON(不带 WWW-Authenticate,避免浏览器弹原生登录框),
+    页面与静态资源 302 到 /login。
+    """
+    path = request.url.path
     users = auth_users()
-    if users and request.url.path != "/api/health" \
-            and not request.url.path.startswith("/api/tiles/"):
-        # 应用只在 Caddy 反代之后可达(8080 仅绑 127.0.0.1),
-        # 真实客户端 IP 取 Caddy 写入的 X-Forwarded-For,
-        # 否则所有访客共享一个限流计数,扫描器一探测就全站 429。
-        xff = request.headers.get("X-Forwarded-For", "")
-        ip = xff.split(",")[0].strip() or (request.client.host if request.client else "?")
-        now = time.time()
-        fails = [t for t in _failures[ip] if now - t < FAIL_WINDOW]
-        _failures[ip] = fails
-        if len(fails) >= FAIL_THRESHOLD and now - fails[-FAIL_THRESHOLD] < LOCKOUT:
+    if users and path not in _AUTH_EXACT \
+            and not any(path.startswith(p) for p in _AUTH_PREFIX):
+        ip = _client_ip(request)
+        if _is_locked(ip):
             return JSONResponse({"detail": "尝试次数过多,请稍后再试"}, status_code=429)
+        user = ""
         header = request.headers.get("Authorization", "")
-        user = pw = ""
         if header.startswith("Basic "):
             try:
-                user, pw = base64.b64decode(header[6:]).decode("utf-8").split(":", 1)
+                u, pw = base64.b64decode(header[6:]).decode("utf-8").split(":", 1)
+                stored = users.get(u)
+                if stored is not None and _verify_password(pw, stored):
+                    user = u
             except (ValueError, UnicodeDecodeError):
                 pass
-        stored = users.get(user)
-        if stored is None or not _verify_password(pw, stored):
-            _failures[ip].append(now)
-            return JSONResponse(
-                {"detail": "需要认证"},
-                status_code=401,
-                headers={"WWW-Authenticate": 'Basic realm="TeslaMate Visualizer"'},
-            )
+        if not user:
+            token = request.cookies.get(SESSION_COOKIE, "")
+            if token:
+                user = _session_user(token)
+        if not user:
+            if not header:  # 会话失效的 Cookie 不计入失败,只有显式错误的 Basic 凭证才计数
+                pass
+            else:
+                _record_fail(ip)
+            if path.startswith("/api/"):
+                return JSONResponse({"detail": "未登录"}, status_code=401)
+            from urllib.parse import quote
+            return RedirectResponse(url=f"/login?next={quote(path)}", status_code=302)
         request.state.user = user  # 供个人中心接口识别当前登录账号
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
@@ -1536,6 +1619,47 @@ def remove_user(name: str, request: Request):
     del users[name]
     _save_users(users)
     return {"ok": True, "users": sorted(users)}
+
+
+class LoginBody(BaseModel):
+    username: str
+    password: str
+
+
+@app.get("/login")
+def login_page(request: Request):
+    """登录页(静态资源挂载之前注册以覆盖 /login):已登录用户直接回首页。"""
+    token = request.cookies.get(SESSION_COOKIE, "")
+    if token and _session_user(token):
+        return RedirectResponse(url="/", status_code=302)
+    return FileResponse(os.path.join(os.path.dirname(__file__), "static", "login.html"))
+
+
+@app.post("/api/login")
+def login(body: LoginBody, request: Request):
+    """网页登录:校验账号后下发 HMAC 签名会话 Cookie(30 天);失败按 IP 限流。"""
+    ip = _client_ip(request)
+    if _is_locked(ip):
+        raise HTTPException(status_code=429, detail="尝试次数过多,请稍后再试")
+    stored = auth_users().get(body.username)
+    if stored is None or not _verify_password(body.password, stored):
+        _record_fail(ip)
+        raise HTTPException(status_code=401, detail="用户名或密码不正确")
+    resp = JSONResponse({"ok": True, "user": body.username})
+    resp.set_cookie(
+        SESSION_COOKIE, _make_session(body.username),
+        max_age=SESSION_TTL, httponly=True, samesite="lax", path="/",
+        secure=request.headers.get("X-Forwarded-Proto", "").lower() == "https",
+    )
+    return resp
+
+
+@app.post("/api/logout")
+def logout():
+    """退出登录:清除会话 Cookie。"""
+    resp = JSONResponse({"ok": True})
+    resp.delete_cookie(SESSION_COOKIE, path="/")
+    return resp
 
 
 from .backup import router as backup_router
