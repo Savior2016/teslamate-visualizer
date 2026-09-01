@@ -1727,6 +1727,28 @@ footer a { color: var(--text-muted); }
   line-height: 1.7;
 }
 
+/* 控制页底部帮助入口 */
+.ctl-help {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--gridline);
+  text-align: center;
+}
+.ctl-help a {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  color: var(--text-muted);
+  text-decoration: none;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.ctl-help a:hover { color: var(--text-primary); border-color: var(--baseline); }
+.ctl-help svg { width: 15px; height: 15px; fill: currentColor; }
+
 /* 指令结果 toast(浮在 Tab 栏上方) */
 .ctl-toast {
   position: fixed;

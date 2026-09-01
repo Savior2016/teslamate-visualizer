@@ -51,10 +51,6 @@
           <span class="meter-val" id="meter-mem-val">—</span>
         </span>
       </span>
-      <a class="acct-entry" href="/guide.html" title="车辆控制接入指南:注册 Tesla 开发者与配对虚拟钥匙">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm8 1.5V8h4.5L14 3.5zM8 12h8v1.6H8V12zm0 3.4h8v1.6H8v-1.6z"/></svg>
-        接入文档
-      </a>
       <a class="acct-entry" href="/account.html" title="账号管理 / Tesla 授权指引">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5zm0 2c-4 0-8 2-8 5v3h16v-3c0-3-4-5-8-5z"/></svg>
         个人中心
@@ -382,7 +378,7 @@
       <div class="card-head">
         <div>
           <h2>车辆控制</h2>
-          <div class="card-sub">指令经你配置的 Tesla 指令后端签名后下发 · 敏感操作二次确认 · <a href="/guide.html">接入文档</a></div>
+          <div class="card-sub">指令经你配置的 Tesla 指令后端签名后下发 · 敏感操作二次确认</div>
         </div>
         <div class="mini-stats" id="ctl-backend"></div>
       </div>
@@ -395,8 +391,8 @@
         <div class="ctl-setup-icon">🔑</div>
         <h3>控制功能尚未接入</h3>
         <p>面板通过「指令后端」向车辆下发已签名的控制指令。<br>
-           按接入文档完成注册与虚拟钥匙配对,在 .env 填入后端地址与令牌后重启即可启用。</p>
-        <a class="btn" href="/guide.html">查看接入文档</a>
+           按帮助文档完成注册与虚拟钥匙配对,在 .env 填入后端地址与令牌后重启即可启用。</p>
+        <a class="btn" href="/guide.html">查看帮助</a>
       </div>
 
       <div id="ctl-main" hidden>
@@ -455,6 +451,14 @@
           </div>
         </div>
         <p class="ctl-note">休眠中的车辆会先被唤醒,首条指令可能需要 10–30 秒;唤醒与指令按 Tesla 计费(个人额度内免费)。</p>
+      </div>
+
+      <!-- 底部帮助入口 -->
+      <div class="ctl-help">
+        <a href="/guide.html">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm.1 15.6a1.2 1.2 0 1 1 1.2-1.2 1.2 1.2 0 0 1-1.2 1.2zm1.4-5.2c-.6.4-.8.6-.8 1.3v.4h-1.7v-.5c0-1.3.6-1.8 1.4-2.4.6-.4.9-.7.9-1.3a1.4 1.4 0 0 0-1.4-1.4 1.5 1.5 0 0 0-1.5 1.5H8.6a3.2 3.2 0 0 1 3.3-3.2 3.1 3.1 0 0 1 3.2 3.1 2.6 2.6 0 0 1-1.6 2.5z"/></svg>
+          帮助:如何接入与使用车辆控制
+        </a>
       </div>
     </div>
   </div>

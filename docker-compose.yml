@@ -75,7 +75,7 @@ services:
       # 首次启动时播种面板账号(写入 data/users.json 后不再读取;
       # 之后请到面板右上角「个人中心」修改密码或新增账号)
       - VISUALIZER_USERS=${PANEL_USERS:-}
-      # 车辆控制(可选):指令后端地址与令牌,详见面板右上角「接入文档」
+      # 车辆控制(可选):指令后端地址与令牌,详见控制分页底部「帮助」
       - CONTROL_API_URL=${CONTROL_API_URL:-}
       - CONTROL_API_TOKEN=${CONTROL_API_TOKEN:-}
       - CONTROL_VIN=${CONTROL_VIN:-}
