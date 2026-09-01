@@ -397,69 +397,131 @@
       </div>
 
       <div id="ctl-main" hidden>
-        <div class="ctl-groups">
-          <div class="ctl-group">
-            <h3>车门与安全</h3>
-            <div class="ctl-grid">
-              <button class="ctl-btn" data-cmd="door_lock"><i>🔒</i>锁车</button>
-              <button class="ctl-btn warn" data-cmd="door_unlock" data-confirm="确认解锁车辆?解锁后车门可直接拉开。"><i>🔓</i>解锁</button>
-              <button class="ctl-btn" data-cmd="sentry_mode" data-args="{&quot;on&quot;:true}"><i>🛡️</i>哨兵 开</button>
-              <button class="ctl-btn" data-cmd="sentry_mode" data-args="{&quot;on&quot;:false}"><i>🛡️</i>哨兵 关</button>
-              <button class="ctl-btn" data-cmd="flash_lights"><i>💡</i>闪灯</button>
-              <button class="ctl-btn" data-cmd="honk_horn"><i>📣</i>鸣笛</button>
-            </div>
-            <div class="ctl-row">
-              <span class="ctl-row-label">车灯爆闪</span>
-              <button class="ctl-mini" data-cmd="flash_strobe" data-args="{&quot;seconds&quot;:10}" data-confirm="将连续闪灯 10 秒(约每秒 1 次),确认?">10 秒</button>
-              <button class="ctl-mini" data-cmd="flash_strobe" data-args="{&quot;seconds&quot;:30}" data-confirm="将连续闪灯 30 秒(约每秒 1 次),确认?">30 秒</button>
-              <button class="ctl-mini" data-cmd="flash_strobe" data-args="{&quot;seconds&quot;:60}" data-confirm="将连续闪灯 60 秒(约每秒 1 次),确认?">60 秒</button>
-              <button class="ctl-mini warn" data-cmd="flash_strobe_stop">停止</button>
-            </div>
-            <p class="ctl-sub-note">官方 flash_lights 指令每次只闪一下,爆闪为面板循环调用;频率受云端往返限制,约 0.5–1 次/秒</p>
+        <div class="ctl-layout">
+          <!-- 车身即按钮:俯视图各部位为异形按钮(复用总览的 Model Y 轮廓) -->
+          <div class="ctl-carbox">
+            <svg class="ctl-car" viewBox="0 0 340 460" role="group" aria-label="车辆控制:点击车身各部位">
+              <!-- 装饰:轮胎/后视镜/车身/玻璃 -->
+              <rect class="car-tire" x="66" y="108" width="16" height="60" rx="8"/>
+              <rect class="car-tire" x="258" y="108" width="16" height="60" rx="8"/>
+              <rect class="car-tire" x="66" y="316" width="16" height="62" rx="8"/>
+              <rect class="car-tire" x="258" y="316" width="16" height="62" rx="8"/>
+              <path class="car-body-base" d="M170 52 C196 52 218 62 232 84 C243 100 251 118 256 142 C261 168 263 190 261 210 C260 228 259 244 259 258 C259 288 261 316 261 334 C260 356 255 378 245 392 C233 408 205 418 170 418 C135 418 107 408 95 392 C85 378 80 356 79 334 C79 316 81 288 81 258 C81 244 80 228 79 210 C77 190 79 168 84 142 C89 118 97 100 108 84 C122 62 144 52 170 52 Z"/>
+              <path class="car-mirror" d="M79 148 L65 151 C60 152 60 160 65 161 L79 163 Z M261 148 L275 151 C280 152 280 160 275 161 L261 163 Z"/>
+
+              <!-- 前备箱(车头引擎盖) -->
+              <g class="ctl-zone" data-zone="frunk" role="button" tabindex="0">
+                <title>前备箱(确认后开启)</title>
+                <path class="zone-shape" d="M124 68 C146 60 194 60 216 68 C224 80 228 90 230 100 C196 92 144 92 110 100 C112 90 116 80 124 68 Z"/>
+                <path class="zone-ico" transform="translate(160.4 67.5) scale(0.8)" d="M4 7l2-3h12l2 3v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7zm2.6-1-1 1h12.8l-1-1H6.6zM9 12h6v2H9v-2z"/>
+                <text class="zone-lab" x="170" y="98">前备箱</text>
+              </g>
+
+              <!-- 闪灯(左前灯)/ 鸣笛(右前灯) -->
+              <g class="ctl-zone" data-zone="flash" role="button" tabindex="0">
+                <title>闪灯一次</title>
+                <path class="zone-shape" d="M98 106 C110 100 124 100 131 107 L128 121 C118 116 106 116 96 121 Z"/>
+                <path class="zone-ico" transform="translate(107 103) scale(0.55)" d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/>
+              </g>
+              <g class="ctl-zone" data-zone="honk" role="button" tabindex="0">
+                <title>鸣笛一次</title>
+                <path class="zone-shape" d="M242 106 C230 100 216 100 209 107 L212 121 C222 116 234 116 244 121 Z"/>
+                <path class="zone-ico" transform="translate(221 103) scale(0.55)" d="M3 9v6h4l5 4V5L7 9H3zm13.5 3a3.5 3.5 0 0 0-2-3.2v6.4a3.5 3.5 0 0 0 2-3.2z"/>
+              </g>
+
+              <!-- 车锁(左侧车门条,随状态切换锁车/解锁) -->
+              <g class="ctl-zone" data-zone="lock" role="button" tabindex="0" style="--zc:var(--series-3)">
+                <title>车锁:点击切换 锁车/解锁</title>
+                <path class="zone-shape" d="M83 152 C82 186 82 212 83 246 C88 252 93 254 98 254 L98 152 C93 152 88 152 83 152 Z"/>
+                <path class="zone-ico ico-locked" transform="translate(81.6 186) scale(0.7)" d="M12 2a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1V7a5 5 0 0 0-5-5zm-3 8V7a3 3 0 1 1 6 0v3H9z"/>
+                <path class="zone-ico ico-unlocked" transform="translate(81.6 186) scale(0.7)" d="M12 2a5 5 0 0 1 5 5h-2.2A2.8 2.8 0 1 0 9.2 7v3H18a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h1V7a5 5 0 0 1 5-5z"/>
+                <text class="zone-lab zone-lab-v" transform="rotate(90 90.5 214)" x="90.5" y="214">车锁</text>
+              </g>
+
+              <!-- 车窗(右侧车窗条,通风 ⇄ 关闭) -->
+              <g class="ctl-zone" data-zone="windows" role="button" tabindex="0" style="--zc:var(--seq-blue-300)">
+                <title>车窗:点击切换 通风/关闭</title>
+                <path class="zone-shape" d="M257 152 C258 186 258 212 257 246 C252 252 247 254 242 254 L242 152 C247 152 252 152 257 152 Z"/>
+                <path class="zone-ico" transform="translate(242.6 186) scale(0.7)" d="M4 5h16v14H4V5zm2 2v10h12V7H6zm6 2-3 4h2v3h2v-3h2l-3-4z"/>
+                <text class="zone-lab zone-lab-v" transform="rotate(90 249.5 214)" x="249.5" y="214">车窗</text>
+              </g>
+
+              <!-- 空调(全景玻璃顶,开 ⇄ 关) -->
+              <g class="ctl-zone" data-zone="climate" role="button" tabindex="0" style="--zc:var(--series-1)">
+                <title>空调:点击切换 开/关</title>
+                <path class="zone-shape" d="M170 162 C210 162 238 168 242 190 C244 230 244 300 240 342 C238 370 208 384 170 384 C132 384 102 370 100 342 C96 300 96 230 98 190 C102 168 130 162 170 162 Z"/>
+                <path class="zone-ico zone-ico-stroke" transform="translate(157 273) scale(1.1)" d="M12 2v20M3.3 7l17.4 10M20.7 7 3.3 17M9 4.5 12 7l3-2.5M9 19.5 12 17l3 2.5"/>
+                <text class="zone-lab" id="ctlz-climate-lab" x="170" y="316">空调</text>
+              </g>
+
+              <!-- 哨兵(车顶圆形徽章,开 ⇄ 关) -->
+              <g class="ctl-zone" data-zone="sentry" role="button" tabindex="0" style="--zc:var(--cat-sentry)">
+                <title>哨兵模式:点击切换 开/关</title>
+                <circle class="zone-shape" cx="170" cy="205" r="23"/>
+                <path class="zone-ico" transform="translate(160 189) scale(0.85)" d="M12 2.2 19 5v6.1c0 4.9-3.3 9.3-7 10.7-3.7-1.4-7-5.8-7-10.7V5l7-2.8z"/>
+                <text class="zone-lab" x="170" y="223">哨兵</text>
+              </g>
+
+              <!-- 充电口(左后翼子板) -->
+              <g class="ctl-zone" data-zone="chargeport" role="button" tabindex="0" style="--zc:var(--cat-charge)">
+                <title>充电口:点击 开/关</title>
+                <path class="zone-shape" d="M84 326 C83 348 85 368 93 383 C97 390 103 394 109 396 L113 377 C107 373 103 365 101 353 L99 326 Z"/>
+                <path class="zone-ico" transform="translate(89.5 352) scale(0.55)" d="M8 2h2v5h4V2h2v5h3v3a8 8 0 0 1-6 7.7V22h-2v-4.3A8 8 0 0 1 5 10V7h3V2z"/>
+              </g>
+
+              <!-- 后备箱(车尾) -->
+              <g class="ctl-zone" data-zone="trunk" role="button" tabindex="0">
+                <title>后备箱(确认后开启)</title>
+                <path class="zone-shape" d="M121 398 C142 391 198 391 219 398 C214 407 206 413 196 415 L144 415 C134 413 126 407 121 398 Z"/>
+                <path class="zone-ico" transform="translate(162.8 396) scale(0.6)" d="M4 7l2-3h12l2 3v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7zm2.6-1-1 1h12.8l-1-1H6.6zM9 12h6v2H9v-2z"/>
+              </g>
+
+              <!-- 车身描边(顶层,不拦截点击) -->
+              <path class="car-body-line" pointer-events="none" d="M170 52 C196 52 218 62 232 84 C243 100 251 118 256 142 C261 168 263 190 261 210 C260 228 259 244 259 258 C259 288 261 316 261 334 C260 356 255 378 245 392 C233 408 205 418 170 418 C135 418 107 408 95 392 C85 378 80 356 79 334 C79 316 81 288 81 258 C81 244 80 228 79 210 C77 190 79 168 84 142 C89 118 97 100 108 84 C122 62 144 52 170 52 Z"/>
+            </svg>
+            <div class="ctl-chips" id="ctl-chips"></div>
+            <p class="ctl-legend-hint">车头左右灯区 = 闪灯 / 鸣笛 · 左门 = 车锁 · 右窗条 = 车窗 · 左后 = 充电口 · 车尾 = 后备箱</p>
           </div>
 
-          <div class="ctl-group">
-            <h3>空调</h3>
-            <div class="ctl-grid two">
-              <button class="ctl-btn" data-cmd="auto_conditioning_start"><i>❄️</i>开启空调</button>
-              <button class="ctl-btn" data-cmd="auto_conditioning_stop"><i>⏹️</i>关闭空调</button>
+          <!-- 参数面板:温度 / 充电 / 爆闪 -->
+          <div class="ctl-panels">
+            <div class="ctl-group">
+              <h3>空调温度</h3>
+              <div class="ctl-row">
+                <button class="ctl-step" id="ctl-temp-minus" aria-label="降温">−</button>
+                <b class="ctl-val" id="ctl-temp-val">21.5°C</b>
+                <button class="ctl-step" id="ctl-temp-plus" aria-label="升温">+</button>
+                <button class="ctl-apply" data-cmd="set_temps" data-args-src="temp">应用到车辆</button>
+              </div>
             </div>
-            <div class="ctl-row">
-              <span class="ctl-row-label">温度</span>
-              <button class="ctl-step" id="ctl-temp-minus" aria-label="降温">−</button>
-              <b class="ctl-val" id="ctl-temp-val">21.5°C</b>
-              <button class="ctl-step" id="ctl-temp-plus" aria-label="升温">+</button>
-              <button class="ctl-apply" data-cmd="set_temps" data-args-src="temp">应用</button>
-            </div>
-          </div>
 
-          <div class="ctl-group">
-            <h3>充电</h3>
-            <div class="ctl-grid">
-              <button class="ctl-btn" data-cmd="charge_start"><i>⚡</i>开始充电</button>
-              <button class="ctl-btn" data-cmd="charge_stop"><i>⏹️</i>停止充电</button>
-              <button class="ctl-btn" data-cmd="charge_port_door_open"><i>🔌</i>开充电口</button>
-              <button class="ctl-btn" data-cmd="charge_port_door_close"><i>🔌</i>关充电口</button>
+            <div class="ctl-group">
+              <h3>充电</h3>
+              <button class="ctl-wide" id="ctl-charge-toggle" data-zone-cmd="charge">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg>
+                <span id="ctl-charge-toggle-lab">开始充电</span>
+              </button>
+              <div class="ctl-row">
+                <span class="ctl-row-label">充电上限</span>
+                <input type="range" id="ctl-limit" min="50" max="100" step="5" value="80">
+                <b class="ctl-val" id="ctl-limit-val">80%</b>
+                <button class="ctl-apply" data-cmd="set_charge_limit" data-args-src="limit">设置</button>
+              </div>
             </div>
-            <div class="ctl-row">
-              <span class="ctl-row-label">充电上限</span>
-              <input type="range" id="ctl-limit" min="50" max="100" step="5" value="80">
-              <b class="ctl-val" id="ctl-limit-val">80%</b>
-              <button class="ctl-apply" data-cmd="set_charge_limit" data-args-src="limit">设置</button>
-            </div>
-          </div>
 
-          <div class="ctl-group">
-            <h3>车身</h3>
-            <div class="ctl-grid">
-              <button class="ctl-btn" data-cmd="window_control" data-args="{&quot;command&quot;:&quot;vent&quot;}"><i>🪟</i>车窗通风</button>
-              <button class="ctl-btn" data-cmd="window_control" data-args="{&quot;command&quot;:&quot;close&quot;}"><i>🪟</i>关闭车窗</button>
-              <button class="ctl-btn warn" data-cmd="actuate_trunk" data-args="{&quot;which_trunk&quot;:&quot;front&quot;}" data-confirm="确认开启前备箱?"><i>🧳</i>前备箱</button>
-              <button class="ctl-btn warn" data-cmd="actuate_trunk" data-args="{&quot;which_trunk&quot;:&quot;rear&quot;}" data-confirm="确认开启后备箱?"><i>🎒</i>后备箱</button>
+            <div class="ctl-group">
+              <h3>车灯爆闪</h3>
+              <div class="ctl-row">
+                <button class="ctl-mini" data-cmd="flash_strobe" data-args="{&quot;seconds&quot;:10}" data-confirm="将连续闪灯 10 秒(约每秒 1 次),确认?">10 秒</button>
+                <button class="ctl-mini" data-cmd="flash_strobe" data-args="{&quot;seconds&quot;:30}" data-confirm="将连续闪灯 30 秒(约每秒 1 次),确认?">30 秒</button>
+                <button class="ctl-mini" data-cmd="flash_strobe" data-args="{&quot;seconds&quot;:60}" data-confirm="将连续闪灯 60 秒(约每秒 1 次),确认?">60 秒</button>
+                <button class="ctl-mini warn" data-cmd="flash_strobe_stop">停止</button>
+              </div>
+              <p class="ctl-sub-note">官方 flash_lights 指令每次只闪一下,爆闪为面板循环调用;频率受云端往返限制,约 0.5–1 次/秒</p>
             </div>
           </div>
         </div>
-        <p class="ctl-note">休眠中的车辆会先被唤醒,首条指令可能需要 10–30 秒;唤醒与指令按 Tesla 计费(个人额度内免费)。</p>
+        <p class="ctl-note">休眠中的车辆会先被唤醒,首条指令可能需要 10–30 秒;唤醒与指令按 Tesla 计费(个人额度内免费)。车锁 / 哨兵 / 车窗状态为面板按最近指令推测(TeslaMate 不上报这几项),空调与充电状态为车辆实际上报。</p>
       </div>
 
       <!-- 底部帮助入口 -->

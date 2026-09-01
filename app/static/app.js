@@ -2219,6 +2219,7 @@
       renderSys(sys);
       renderHeader();
       renderCtlState();
+      loadControlStatus();  // 车辆控制状态(车锁/哨兵推测 + 空调/充电实报)随刷新保持最新
       renderCar();
       renderSessions();
       renderChargers();
@@ -2302,6 +2303,82 @@
 
   let ctlTemp = 21.5;  // 空调温度步进当前值(°C)
   let ctlConfigured = null;  // null=未查询;false 时按钮为预览态(点击提示去配置)
+  let ctlStates = {};  // 车辆状态:locked/sentry/windows_open 为面板推测,climate_on/charging/cable 为实报
+
+  // 车身部位 → 指令:开/关对合并为单按钮,按当前状态决定本次点击发哪条
+  const ZONE_CMD = {
+    lock: (s) => (s.locked === true
+      ? { cmd: 'door_unlock', label: '解锁', confirm: '确认解锁车辆?解锁后车门可直接拉开。' }
+      : { cmd: 'door_lock', label: '锁车' }),
+    sentry: (s) => (s.sentry === true
+      ? { cmd: 'sentry_mode', args: { on: false }, label: '关闭哨兵' }
+      : { cmd: 'sentry_mode', args: { on: true }, label: '开启哨兵' }),
+    climate: (s) => (s.climate_on === true
+      ? { cmd: 'auto_conditioning_stop', label: '关闭空调' }
+      : { cmd: 'auto_conditioning_start', label: '开启空调' }),
+    windows: (s) => (s.windows_open === true
+      ? { cmd: 'window_control', args: { command: 'close' }, label: '关闭车窗' }
+      : { cmd: 'window_control', args: { command: 'vent' }, label: '车窗通风' }),
+    chargeport: (s) => (s.charge_port === true
+      ? { cmd: 'charge_port_door_close', label: '关充电口' }
+      : { cmd: 'charge_port_door_open', label: '开充电口' }),
+    frunk: () => ({ cmd: 'actuate_trunk', args: { which_trunk: 'front' }, label: '前备箱', confirm: '确认开启前备箱?' }),
+    trunk: () => ({ cmd: 'actuate_trunk', args: { which_trunk: 'rear' }, label: '后备箱', confirm: '确认开启后备箱?' }),
+    flash: () => ({ cmd: 'flash_lights', label: '闪灯' }),
+    honk: () => ({ cmd: 'honk_horn', label: '鸣笛' }),
+  };
+
+  // 把车辆状态画到车身按钮与状态胶囊上
+  function renderCtlZones() {
+    const s = ctlStates;
+    const car = $('.ctl-car');
+    if (!car) return;
+    const setZone = (zone, on, label) => {
+      const z = car.querySelector(`[data-zone="${zone}"]`);
+      if (!z) return;
+      z.classList.toggle('on', !!on);
+      if (label != null) {
+        const lab = z.querySelector('.zone-lab');
+        if (lab) lab.textContent = label;
+      }
+    };
+    setZone('lock', s.locked === true, s.locked == null ? '车锁' : (s.locked ? '已锁' : '未锁'));
+    const lockZone = car.querySelector('[data-zone="lock"]');
+    if (lockZone) lockZone.classList.toggle('unlocked', s.locked === false);
+    setZone('sentry', s.sentry === true, s.sentry == null ? '哨兵' : (s.sentry ? '哨兵·开' : '哨兵·关'));
+    setZone('windows', s.windows_open === true, s.windows_open == null ? '车窗' : (s.windows_open ? '通风中' : '车窗'));
+    const climateLab = s.climate_on
+      ? `空调·${(s.climate_temp != null ? Number(s.climate_temp).toFixed(1) : ctlTemp.toFixed(1))}°`
+      : '空调';
+    setZone('climate', s.climate_on === true, climateLab);
+    setZone('chargeport', s.charge_port === true || s.cable === true, null);
+    // 充电主按钮:充电中 ⇄ 开始充电
+    const charging = s.charging === true;
+    const cbtn = $('#ctl-charge-toggle');
+    if (cbtn) {
+      cbtn.classList.toggle('on', charging);
+      $('#ctl-charge-toggle-lab').textContent = charging ? '停止充电' : '开始充电';
+    }
+    // 状态胶囊
+    const tri = (v, onText, offText) => (v == null ? '未知' : (v ? onText : offText));
+    const chips = [
+      ['车锁', tri(s.locked, '已锁', '未锁'), s.locked === true, 'var(--series-3)'],
+      ['哨兵', tri(s.sentry, '开启', '关闭'), s.sentry === true, 'var(--cat-sentry)'],
+      ['空调', s.climate_on ? '开启' : '关闭', s.climate_on === true, 'var(--series-1)'],
+      ['车窗', tri(s.windows_open, '通风', '关闭'), s.windows_open === true, 'var(--seq-blue-300)'],
+      ['充电', s.charging ? '充电中' : (s.cable ? '已插枪' : '未插枪'), s.charging === true, 'var(--cat-charge)'],
+    ];
+    const box = $('#ctl-chips');
+    if (box) {
+      box.textContent = '';
+      chips.forEach(([name, val, on, color]) => {
+        const c = el('span', `ctl-chip${on ? ' on' : ''}`);
+        c.style.setProperty('--chip-c', color);
+        c.append(`${name} `, el('b', '', val));
+        box.appendChild(c);
+      });
+    }
+  }
 
   // 指令结果 toast:浮在 Tab 栏上方的玻璃胶囊,3 秒自动消失
   let ctlToastTimer = null;
@@ -2331,6 +2408,14 @@
       $('#ctl-backend').textContent = ctlConfigured
         ? `指令后端:${st.backend}${st.vin_tail ? ` · VIN …${st.vin_tail}` : ''}`
         : '';
+      if (st.states) {
+        ctlStates = st.states;
+        if (st.states.climate_temp != null) {
+          ctlTemp = Number(st.states.climate_temp);
+          $('#ctl-temp-val').textContent = `${ctlTemp.toFixed(1)}°C`;
+        }
+      }
+      renderCtlZones();
     } catch (e) { /* 401 会跳登录页;其他错误保留引导态 */ }
   }
 
@@ -2365,16 +2450,18 @@
       box.appendChild(el('span', 'ctl-sleep-hint',
         '车辆休眠中:首条指令会先唤醒车辆,可能需要 10–30 秒'));
     }
+    renderCtlZones();
   }
 
-  async function sendCmd(cmd, args, btn) {
+  async function sendCmd(cmd, args, btn, label, confirmText) {
     if (ctlConfigured === false) {  // 未接入:预览态,点击只提示
       ctlToast('尚未接入指令后端,按钮仅为预览;配置方法见页面底部「帮助」', false);
       return;
     }
-    if (btn.dataset.confirm && !confirm(btn.dataset.confirm)) return;
-    const label = btn.textContent.trim();
-    btn.disabled = true;
+    const ask = confirmText || btn.dataset.confirm;
+    if (ask && !confirm(ask)) return;
+    const text = label || btn.textContent.trim();
+    if (btn.tagName.toLowerCase() !== 'g') btn.disabled = true;
     btn.classList.add('busy');
     try {
       const res = await fetch('/api/control/command', {
@@ -2384,18 +2471,47 @@
       });
       if (res.status === 401) { location.href = '/login?next=/'; return; }
       const data = await res.json().catch(() => ({}));
-      if (res.ok && data.ok) ctlToast(`✓ ${label}:已执行`, true);
-      else ctlToast(`${label}:${data.reason || data.detail || `HTTP ${res.status}`}`, false);
+      if (res.ok && data.ok) {
+        ctlToast(`✓ ${text}:已执行`, true);
+        if (data.states) { ctlStates = data.states; renderCtlZones(); }
+      } else {
+        ctlToast(`${text}:${data.reason || data.detail || `HTTP ${res.status}`}`, false);
+      }
     } catch (e) {
-      ctlToast(`${label}:网络错误`, false);
+      ctlToast(`${text}:网络错误`, false);
     } finally {
-      btn.disabled = false;
+      if (btn.tagName.toLowerCase() !== 'g') btn.disabled = false;
       btn.classList.remove('busy');
     }
   }
 
+  // 车身部位点击:按当前状态决定发开还是关
+  function fireZone(z) {
+    const spec = (ZONE_CMD[z.dataset.zone] || (() => null))(ctlStates);
+    if (!spec) return;
+    sendCmd(spec.cmd, spec.args || {}, z, spec.label, spec.confirm);
+  }
+
   function initControl() {
-    // 指令按钮统一走事件委托;参数来自 data-args(静态 JSON)或 data-args-src(温度/滑杆当前值)
+    // 车身异形按钮:点击 / 回车 / 空格触发
+    const car = $('.ctl-car');
+    car.addEventListener('click', (e) => {
+      const z = e.target.closest('.ctl-zone');
+      if (z) fireZone(z);
+    });
+    car.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      const z = e.target.closest('.ctl-zone');
+      if (z) { e.preventDefault(); fireZone(z); }
+    });
+    // 充电主按钮:按状态切换 开始/停止
+    $('#ctl-charge-toggle').addEventListener('click', (e) => {
+      const b = e.currentTarget;
+      const stopping = ctlStates.charging === true;
+      sendCmd(stopping ? 'charge_stop' : 'charge_start', {}, b,
+        stopping ? '停止充电' : '开始充电');
+    });
+    // 其余指令按钮(温度应用 / 上限设置 / 爆闪)统一走事件委托
     $('#page-control').addEventListener('click', (e) => {
       const b = e.target.closest('[data-cmd]');
       if (!b) return;

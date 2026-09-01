@@ -25,6 +25,7 @@ from collections import defaultdict
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
+from psycopg.types.json import Jsonb
 from pydantic import BaseModel
 
 router = APIRouter(tags=["control"])
@@ -68,6 +69,78 @@ _strobe_lock = threading.Lock()
 _strobe_stop = threading.Event()
 _strobe_stop.set()
 _strobe_until = 0.0
+
+# 车辆状态:TeslaMate 只上报空调 / 充电 / 充电线;车锁、哨兵、车窗、充电口盖
+# TeslaMate 不上报(Tesla 也不推送),由面板按「最近一次成功指令」乐观推测,
+# 持久化到 panel_manual(kind='control_state', key='current'),重启不丢。
+_STATE_KIND = "control_state"
+
+
+def _optimistic() -> dict:
+    try:
+        return dict(_m()._manual_all(_STATE_KIND).get("current") or {})
+    except Exception:  # noqa: BLE001 — 状态读取失败不影响指令主流程
+        return {}
+
+
+def _save_optimistic(patch: dict) -> None:
+    state = {**_optimistic(), **patch, "updated_at": int(time.time())}
+    _m()._exec(
+        """
+        INSERT INTO panel_manual (kind, key, payload) VALUES (%s, 'current', %s)
+        ON CONFLICT (kind, key) DO UPDATE SET payload = EXCLUDED.payload
+        """,
+        (_STATE_KIND, Jsonb(state)),
+    )
+
+
+def _state_patch(cmd: str, args: dict) -> dict | None:
+    """指令被车辆确认后,需要落盘的乐观状态补丁。"""
+    if cmd == "door_lock":
+        return {"locked": True}
+    if cmd == "door_unlock":
+        return {"locked": False}
+    if cmd == "sentry_mode":
+        return {"sentry": bool(args.get("on"))}
+    if cmd == "window_control":
+        return {"windows_open": args.get("command") == "vent"}
+    if cmd == "auto_conditioning_start":
+        return {"climate_on": True}
+    if cmd == "auto_conditioning_stop":
+        return {"climate_on": False}
+    if cmd == "charge_port_door_open":
+        return {"charge_port": True}
+    if cmd == "charge_port_door_close":
+        return {"charge_port": False}
+    return None
+
+
+def _live_states() -> dict:
+    """车辆实际上报的状态(空调/充电/充电线),作为乐观推测的底盘,实时项以它为准。"""
+    m = _m()
+    out: dict = {}
+    rows = m.q("SELECT is_climate_on, driver_temp_setting FROM positions "
+               "ORDER BY date DESC LIMIT 1")
+    if rows:
+        out["climate_on"] = bool(rows[0]["is_climate_on"])
+        if rows[0]["driver_temp_setting"] is not None:
+            out["climate_temp"] = float(rows[0]["driver_temp_setting"])
+    out["charging"] = bool(m.q("SELECT 1 FROM charging_processes "
+                               "WHERE end_date IS NULL LIMIT 1"))
+    rows = m.q("SELECT conn_charge_cable FROM charges ORDER BY date DESC LIMIT 1")
+    out["cable"] = bool(rows and rows[0]["conn_charge_cable"])
+    return out
+
+
+def _states() -> dict:
+    live: dict = {}
+    try:
+        live = _live_states()
+    except Exception:  # noqa: BLE001 — 数据库异常时退回纯乐观状态
+        pass
+    # 乐观推测垫底(覆盖 locked/sentry/windows_open/charge_port),
+    # 实时上报项(climate_on/charging/cable)以车辆为准
+    return {**_optimistic(), **live}
 
 
 class CommandIn(BaseModel):
@@ -187,17 +260,17 @@ def _strobe_cancel() -> dict:
 
 @router.get("/api/control/status")
 def control_status():
-    """控制功能是否已配置指令后端(不泄露令牌,只回域名与 VIN 后 6 位)。"""
+    """控制功能是否已配置指令后端(不泄露令牌,只回域名与 VIN 后 6 位)+ 车辆状态。"""
+    base = {"configured": False, "strobe_active": _strobe_active(), "states": _states()}
     if not (CONTROL_API_URL and CONTROL_API_TOKEN):
-        return {"configured": False, "strobe_active": _strobe_active()}
+        return base
     host = CONTROL_API_URL.split("://", 1)[-1].split("/", 1)[0]
     vin_tail = None
     try:
         vin_tail = _vin()[-6:]
     except Exception:  # noqa: BLE001 — 车辆未入库时仅影响展示
         pass
-    return {"configured": True, "backend": host, "vin_tail": vin_tail,
-            "strobe_active": _strobe_active()}
+    return {**base, "configured": True, "backend": host, "vin_tail": vin_tail}
 
 
 @router.post("/api/control/command")
@@ -224,7 +297,15 @@ def send_command(body: CommandIn, request: Request):
         return _strobe_cancel()
 
     args = _validate_args(body.cmd, body.args or {})
-    return {"cmd": body.cmd, **_forward(body.cmd, args)}
+    result = {"cmd": body.cmd, **_forward(body.cmd, args)}
+    patch = _state_patch(body.cmd, args)
+    if result.get("ok") and patch:
+        try:
+            _save_optimistic(patch)
+            result["states"] = _states()
+        except Exception:  # noqa: BLE001 — 状态落盘失败不视为指令失败
+            pass
+    return result
 
 
 @router.get("/.well-known/appspecific/com.tesla.3p.public-key.pem")
