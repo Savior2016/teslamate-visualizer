@@ -1640,22 +1640,25 @@ footer a { color: var(--text-muted); }
 }
 .ctl-car { width: 100%; max-width: 330px; height: auto; display: block; }
 
-/* 车身部位 = 异形按钮;--zc 为该部位主题色 */
+/* 车身部位 = 异形按钮;--zc 为该部位主题色。
+   按钮边界与车身钣金缝/玻璃边共享曲线,默认不描边——边框由车身自身缝线统一刻画 */
 .ctl-zone { cursor: pointer; -webkit-tap-highlight-color: transparent; outline: none; }
 .ctl-zone .zone-shape {
-  fill: color-mix(in srgb, var(--zc, var(--series-1)) 7%, transparent);
-  stroke: color-mix(in srgb, var(--zc, var(--series-1)) 40%, transparent);
-  stroke-width: 1.2;
+  fill: color-mix(in srgb, var(--zc, var(--series-1)) 6%, transparent);
+  stroke: none;
   transition: fill 0.2s ease, stroke 0.2s ease, filter 0.2s ease;
 }
 .ctl-zone:hover .zone-shape,
 .ctl-zone:focus-visible .zone-shape {
-  fill: color-mix(in srgb, var(--zc, var(--series-1)) 20%, transparent);
+  fill: color-mix(in srgb, var(--zc, var(--series-1)) 22%, transparent);
+  stroke: color-mix(in srgb, var(--zc, var(--series-1)) 70%, transparent);
+  stroke-width: 1;
   filter: drop-shadow(0 0 6px color-mix(in srgb, var(--zc, var(--series-1)) 55%, transparent));
 }
 .ctl-zone.on .zone-shape {
   fill: color-mix(in srgb, var(--zc, var(--series-1)) 32%, transparent);
   stroke: var(--zc, var(--series-1));
+  stroke-width: 1.2;
 }
 .ctl-zone.busy .zone-shape { animation: ctlzone-pulse 1s ease-in-out infinite; }
 @keyframes ctlzone-pulse { 50% { fill: color-mix(in srgb, var(--zc, var(--series-1)) 28%, transparent); } }
