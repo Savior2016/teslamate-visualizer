@@ -17,6 +17,7 @@ tesla-http-proxy(自建)或兼容 Fleet API 的托管服务(Teslemetry / MyTesla
 """
 import json
 import os
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -57,6 +58,16 @@ _CMDS = {
     "window_control": {"command": ("vent", "close")},  # lat/lon 由后端自动补车当前位置
     "actuate_trunk": {"which_trunk": ("front", "rear")},
 }
+
+# 爆闪:flash_lights 官方指令只闪一次,这里用后台线程循环调用模拟;
+# 频率受「面板 → 指令后端 → Tesla 云端 → 车辆蜂窝网络」整条链路往返限制,
+# 实测上限约 0.5–1 次/秒,达不到警灯级高频。最长 60 秒,可随时停止。
+STROBE_MIN_INTERVAL = 0.9   # 两次闪灯的最小间隔(秒),含往返耗时
+STROBE_MAX_SECONDS = 60
+_strobe_lock = threading.Lock()
+_strobe_stop = threading.Event()
+_strobe_stop.set()
+_strobe_until = 0.0
 
 
 class CommandIn(BaseModel):
@@ -111,37 +122,9 @@ def _validate_args(cmd: str, args: dict) -> dict:
     return out
 
 
-@router.get("/api/control/status")
-def control_status():
-    """控制功能是否已配置指令后端(不泄露令牌,只回域名与 VIN 后 6 位)。"""
-    if not (CONTROL_API_URL and CONTROL_API_TOKEN):
-        return {"configured": False}
-    host = CONTROL_API_URL.split("://", 1)[-1].split("/", 1)[0]
-    vin_tail = None
-    try:
-        vin_tail = _vin()[-6:]
-    except Exception:  # noqa: BLE001 — 车辆未入库时仅影响展示
-        pass
-    return {"configured": True, "backend": host, "vin_tail": vin_tail}
-
-
-@router.post("/api/control/command")
-def send_command(body: CommandIn, request: Request):
-    """下发车辆指令:白名单校验 → 节流 → 转发指令后端,返回 Tesla 侧执行结果。"""
-    if not (CONTROL_API_URL and CONTROL_API_TOKEN):
-        raise HTTPException(status_code=503, detail="控制功能未配置,请先在 .env 设置 CONTROL_API_URL / CONTROL_API_TOKEN")
-    if body.cmd not in _CMDS:
-        raise HTTPException(status_code=422, detail="不支持的指令")
-    user = getattr(request.state, "user", "?")
-    now = time.time()
-    log = [t for t in _cmd_log[user] if now - t < CMD_WINDOW]
-    _cmd_log[user] = log
-    if len(log) >= CMD_LIMIT:
-        raise HTTPException(status_code=429, detail="指令过于频繁,请稍后再试")
-    log.append(now)
-
-    args = _validate_args(body.cmd, body.args or {})
-    url = f"{CONTROL_API_URL}/api/1/vehicles/{_vin()}/command/{body.cmd}"
+def _forward(cmd: str, args: dict) -> dict:
+    """向指令后端转发一条指令,返回 {ok, reason}。"""
+    url = f"{CONTROL_API_URL}/api/1/vehicles/{_vin()}/command/{cmd}"
     req = urllib.request.Request(
         url,
         data=json.dumps(args).encode("utf-8"),
@@ -159,13 +142,89 @@ def send_command(body: CommandIn, request: Request):
         raise HTTPException(status_code=502, detail=f"指令后端返回 HTTP {e.code}:{detail}")
     except (urllib.error.URLError, TimeoutError, ValueError) as e:
         raise HTTPException(status_code=502, detail=f"无法连接指令后端:{e}")
-
     result = (payload.get("response") or {})
-    return {
-        "ok": bool(result.get("result")),
-        "reason": result.get("reason") or "",
-        "cmd": body.cmd,
-    }
+    return {"ok": bool(result.get("result")), "reason": result.get("reason") or ""}
+
+
+def _strobe_loop() -> None:
+    """爆闪线程:等上一条返回再发下一条,保证最小间隔;出错不中断(车辆暂时不可达时继续尝试)。"""
+    while not _strobe_stop.is_set() and time.time() < _strobe_until:
+        t0 = time.time()
+        try:
+            _forward("flash_lights", {})
+        except Exception:  # noqa: BLE001 — 爆闪期间单条失败不终止整段
+            pass
+        _strobe_stop.wait(max(0.25, STROBE_MIN_INTERVAL - (time.time() - t0)))
+
+
+def _strobe_active() -> bool:
+    return not _strobe_stop.is_set() and time.time() < _strobe_until
+
+
+def _strobe_start(args: dict) -> dict:
+    global _strobe_until
+    try:
+        seconds = int(args.get("seconds", 10))
+    except (TypeError, ValueError):
+        seconds = 10
+    seconds = max(5, min(seconds, STROBE_MAX_SECONDS))
+    with _strobe_lock:
+        if _strobe_active():
+            raise HTTPException(status_code=409, detail="爆闪进行中,可先停止再重新开始")
+        _strobe_stop.clear()
+        _strobe_until = time.time() + seconds
+        threading.Thread(target=_strobe_loop, daemon=True).start()
+    return {"ok": True, "reason": "", "cmd": "flash_strobe", "seconds": seconds}
+
+
+def _strobe_cancel() -> dict:
+    global _strobe_until
+    with _strobe_lock:
+        _strobe_stop.set()
+        _strobe_until = 0.0
+    return {"ok": True, "reason": "", "cmd": "flash_strobe_stop"}
+
+
+@router.get("/api/control/status")
+def control_status():
+    """控制功能是否已配置指令后端(不泄露令牌,只回域名与 VIN 后 6 位)。"""
+    if not (CONTROL_API_URL and CONTROL_API_TOKEN):
+        return {"configured": False, "strobe_active": _strobe_active()}
+    host = CONTROL_API_URL.split("://", 1)[-1].split("/", 1)[0]
+    vin_tail = None
+    try:
+        vin_tail = _vin()[-6:]
+    except Exception:  # noqa: BLE001 — 车辆未入库时仅影响展示
+        pass
+    return {"configured": True, "backend": host, "vin_tail": vin_tail,
+            "strobe_active": _strobe_active()}
+
+
+@router.post("/api/control/command")
+def send_command(body: CommandIn, request: Request):
+    """下发车辆指令:白名单校验 → 节流 → 转发指令后端,返回 Tesla 侧执行结果。"""
+    if not (CONTROL_API_URL and CONTROL_API_TOKEN):
+        raise HTTPException(status_code=503, detail="控制功能未配置,请先在 .env 设置 CONTROL_API_URL / CONTROL_API_TOKEN")
+    # 爆闪为本地面板功能(循环 flash_lights),不直接转发;计 1 次节流
+    if body.cmd in ("flash_strobe", "flash_strobe_stop"):
+        pass
+    elif body.cmd not in _CMDS:
+        raise HTTPException(status_code=422, detail="不支持的指令")
+    user = getattr(request.state, "user", "?")
+    now = time.time()
+    log = [t for t in _cmd_log[user] if now - t < CMD_WINDOW]
+    _cmd_log[user] = log
+    if len(log) >= CMD_LIMIT:
+        raise HTTPException(status_code=429, detail="指令过于频繁,请稍后再试")
+    log.append(now)
+
+    if body.cmd == "flash_strobe":
+        return _strobe_start(body.args or {})
+    if body.cmd == "flash_strobe_stop":
+        return _strobe_cancel()
+
+    args = _validate_args(body.cmd, body.args or {})
+    return {"cmd": body.cmd, **_forward(body.cmd, args)}
 
 
 @router.get("/.well-known/appspecific/com.tesla.3p.public-key.pem")

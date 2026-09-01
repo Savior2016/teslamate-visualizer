@@ -386,13 +386,14 @@
       <!-- 车辆当前状态条(数据来自 TeslaMate 上报) -->
       <div class="ctl-state" id="ctl-state"></div>
 
-      <!-- 未配置引导 -->
+      <!-- 未接入横幅(控制面板照常展示,按钮为预览态) -->
       <div class="ctl-setup" id="ctl-setup" hidden>
-        <div class="ctl-setup-icon">🔑</div>
-        <h3>控制功能尚未接入</h3>
-        <p>面板通过「指令后端」向车辆下发已签名的控制指令。<br>
-           按帮助文档完成注册与虚拟钥匙配对,在 .env 填入后端地址与令牌后重启即可启用。</p>
-        <a class="btn" href="/guide.html">查看帮助</a>
+        <span class="ctl-setup-icon">🔑</span>
+        <div class="ctl-setup-text">
+          <b>控制功能尚未接入</b>,以下为控制面板预览,按钮暂不可用。<br>
+          完成注册与虚拟钥匙配对、在 .env 填入后端地址与令牌后重启即可启用。
+        </div>
+        <a class="ctl-setup-link" href="/guide.html">查看帮助</a>
       </div>
 
       <div id="ctl-main" hidden>
@@ -402,18 +403,26 @@
             <div class="ctl-grid">
               <button class="ctl-btn" data-cmd="door_lock"><i>🔒</i>锁车</button>
               <button class="ctl-btn warn" data-cmd="door_unlock" data-confirm="确认解锁车辆?解锁后车门可直接拉开。"><i>🔓</i>解锁</button>
-              <button class="ctl-btn" data-cmd="sentry_mode" data-args="{&quot;on&quot;:true}"><i>🛡</i>哨兵 开</button>
-              <button class="ctl-btn" data-cmd="sentry_mode" data-args="{&quot;on&quot;:false}"><i>🛡</i>哨兵 关</button>
+              <button class="ctl-btn" data-cmd="sentry_mode" data-args="{&quot;on&quot;:true}"><i>🛡️</i>哨兵 开</button>
+              <button class="ctl-btn" data-cmd="sentry_mode" data-args="{&quot;on&quot;:false}"><i>🛡️</i>哨兵 关</button>
               <button class="ctl-btn" data-cmd="flash_lights"><i>💡</i>闪灯</button>
               <button class="ctl-btn" data-cmd="honk_horn"><i>📣</i>鸣笛</button>
             </div>
+            <div class="ctl-row">
+              <span class="ctl-row-label">车灯爆闪</span>
+              <button class="ctl-mini" data-cmd="flash_strobe" data-args="{&quot;seconds&quot;:10}" data-confirm="将连续闪灯 10 秒(约每秒 1 次),确认?">10 秒</button>
+              <button class="ctl-mini" data-cmd="flash_strobe" data-args="{&quot;seconds&quot;:30}" data-confirm="将连续闪灯 30 秒(约每秒 1 次),确认?">30 秒</button>
+              <button class="ctl-mini" data-cmd="flash_strobe" data-args="{&quot;seconds&quot;:60}" data-confirm="将连续闪灯 60 秒(约每秒 1 次),确认?">60 秒</button>
+              <button class="ctl-mini warn" data-cmd="flash_strobe_stop">停止</button>
+            </div>
+            <p class="ctl-sub-note">官方 flash_lights 指令每次只闪一下,爆闪为面板循环调用;频率受云端往返限制,约 0.5–1 次/秒</p>
           </div>
 
           <div class="ctl-group">
             <h3>空调</h3>
             <div class="ctl-grid two">
               <button class="ctl-btn" data-cmd="auto_conditioning_start"><i>❄️</i>开启空调</button>
-              <button class="ctl-btn" data-cmd="auto_conditioning_stop"><i>⏹</i>关闭空调</button>
+              <button class="ctl-btn" data-cmd="auto_conditioning_stop"><i>⏹️</i>关闭空调</button>
             </div>
             <div class="ctl-row">
               <span class="ctl-row-label">温度</span>
@@ -428,7 +437,7 @@
             <h3>充电</h3>
             <div class="ctl-grid">
               <button class="ctl-btn" data-cmd="charge_start"><i>⚡</i>开始充电</button>
-              <button class="ctl-btn" data-cmd="charge_stop"><i>⏹</i>停止充电</button>
+              <button class="ctl-btn" data-cmd="charge_stop"><i>⏹️</i>停止充电</button>
               <button class="ctl-btn" data-cmd="charge_port_door_open"><i>🔌</i>开充电口</button>
               <button class="ctl-btn" data-cmd="charge_port_door_close"><i>🔌</i>关充电口</button>
             </div>

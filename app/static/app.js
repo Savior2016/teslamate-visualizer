@@ -2301,6 +2301,7 @@
   /* ---------- 车辆控制 ---------- */
 
   let ctlTemp = 21.5;  // 空调温度步进当前值(°C)
+  let ctlConfigured = null;  // null=未查询;false 时按钮为预览态(点击提示去配置)
 
   // 指令结果 toast:浮在 Tab 栏上方的玻璃胶囊,3 秒自动消失
   let ctlToastTimer = null;
@@ -2318,14 +2319,16 @@
     ctlToastTimer = setTimeout(() => t.classList.remove('show'), 3200);
   }
 
-  // 查询控制后端配置状态:未配置显示引导,已配置显示控制面板
+  // 查询控制后端配置状态:无论是否接入都展示控制面板排版,未接入时为预览态
   async function loadControlStatus() {
     try {
       const st = await api('control/status');
-      const configured = !!st.configured;
-      $('#ctl-setup').hidden = configured;
-      $('#ctl-main').hidden = !configured;
-      $('#ctl-backend').textContent = configured
+      ctlConfigured = !!st.configured;
+      $('#ctl-setup').hidden = ctlConfigured;
+      const main = $('#ctl-main');
+      main.hidden = false;
+      main.classList.toggle('preview', !ctlConfigured);
+      $('#ctl-backend').textContent = ctlConfigured
         ? `指令后端:${st.backend}${st.vin_tail ? ` · VIN …${st.vin_tail}` : ''}`
         : '';
     } catch (e) { /* 401 会跳登录页;其他错误保留引导态 */ }
@@ -2365,6 +2368,10 @@
   }
 
   async function sendCmd(cmd, args, btn) {
+    if (ctlConfigured === false) {  // 未接入:预览态,点击只提示
+      ctlToast('尚未接入指令后端,按钮仅为预览;配置方法见页面底部「帮助」', false);
+      return;
+    }
     if (btn.dataset.confirm && !confirm(btn.dataset.confirm)) return;
     const label = btn.textContent.trim();
     btn.disabled = true;
