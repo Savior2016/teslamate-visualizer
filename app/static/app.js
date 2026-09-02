@@ -767,10 +767,11 @@
     return S.overview ? (S.overview.kwhPerIdealKm || 0) : 0;
   }
 
-  /* 折叠日组右侧的小型环状耗电图:按 行驶/哨兵/驻车空调/驻车耗电 的 kWh 占比分段 */
+  /* 折叠日组右侧的小型环状耗电图:按 行驶/哨兵/驻车耗电 的 kWh 占比分段
+     (驻车空调已与休眠掉电合并为「驻车耗电」,与总览口径一致) */
   const SVG_NS = 'http://www.w3.org/2000/svg';
   const DRAIN_SEGS = [
-    ['drive', '行驶'], ['sentry', '哨兵'], ['climate', '驻车空调'], ['idle', '驻车耗电'],
+    ['drive', '行驶'], ['sentry', '哨兵'], ['idle', '驻车耗电'],
   ];
 
   function eventDrainKwh(ev) {
@@ -788,12 +789,11 @@
   }
 
   function dayDrainDonut(evs) {
-    const drain = { drive: 0, sentry: 0, climate: 0, idle: 0 };
+    const drain = { drive: 0, sentry: 0, idle: 0 };
     evs.forEach((ev) => {
       const kwh = eventDrainKwh(ev);
       if (kwh === null || kwh <= 0) return;
-      const k = (ev.kind === 'idle' && ev.meta.kind === 'climate') ? 'climate' : ev.kind;
-      drain[k] += kwh;
+      drain[ev.kind] += kwh;  // idle 含驻车空调(kind='climate')与休眠掉电
     });
     const total = DRAIN_SEGS.reduce((s, [k]) => s + drain[k], 0);
 
@@ -1005,29 +1005,46 @@
       }],
     }), { notMerge: true });
 
-    // 哨兵耗电曲线:仅取哨兵时段内的电量采样,时段间断开
+    // 每天哨兵耗电总和(柱状图;按当前电量维度 %/kWh/km 换算)
     const dimDrain = battDim();
-    const drainData = [];
-    sentry.forEach((p) => {
-      for (const [t, l] of a.battery) {
-        if (t >= p.s && t <= p.e) drainData.push([t, l]);
-      }
+    const convDrain = dimDrain === 'km' ? kmAtPct : dimDrain === 'kwh' ? kwhAtPct : (p) => p;
+    const drainDays = days.slice().reverse();  // 旧 → 新
+    const drainBars = drainDays.map((d) => {
+      const pct = (byDay.get(d.key) || []).reduce((s, seg) => s - seg.delta, 0);
+      const v = convDrain(pct);
+      return { day: d, pct, value: v === null ? 0 : v };
     });
-    const drainSeries = battSeriesData(drainData);
     charts.sentryDrain.setOption(Object.assign({}, chartTheme(), {
       animation: false,
-      tooltip: tooltipAxis({ '电量': '%', '剩余电量(折算)': 'kWh', '剩余里程(折算)': 'km' },
-        (v) => fmtTime(v, true), dualBatt),
+      tooltip: {
+        trigger: 'axis',
+        backgroundColor: cssVar('--surface-1'),
+        borderColor: cssVar('--border'), borderWidth: 1, padding: [8, 12],
+        textStyle: { color: cssVar('--text-primary'), fontSize: 12 },
+        extraCssText: 'box-shadow: 0 4px 16px rgba(0,0,0,.18);border-radius:8px;',
+        axisPointer: { type: 'shadow', shadowStyle: { color: 'rgba(128,128,128,0.08)' } },
+        formatter(params) {
+          const m = drainBars[params[0].dataIndex];
+          return `<div style="color:${cssVar('--text-muted')};font-size:11px;margin-bottom:4px">` +
+            `${dayLabel(m.day.ms)}</div>` +
+            `<div>哨兵耗电 <b>${battVal(m.pct)}</b>` +
+            (battAlt(m.pct) ? ` <span style="color:${cssVar('--text-secondary')}">${battAlt(m.pct)}</span>` : '') +
+            `</div>`;
+        },
+      },
       grid: trendGrid(24),
-      xAxis: Object.assign(timeAxis(S.days), { min: domain.min, max: domain.max }),
-      yAxis: Object.assign(axisCommon(), { type: 'value', scale: true,
+      xAxis: Object.assign(axisCommon(), { type: 'category',
+        data: drainBars.map((m) => fmtTime(m.day.ms).slice(0, 5)),
+        axisLabel: { color: cssVar('--text-muted'), fontSize: 11 } }),
+      yAxis: Object.assign(axisCommon(), { type: 'value', min: 0,
         axisLabel: { color: cssVar('--text-muted'), fontSize: 11,
           formatter: dimDrain === 'pct' ? '{value}%' : '{value}' } }),
-      series: [Object.assign(lineSeries(BATT_SERIES_NAME[dimDrain], drainSeries,
-        cssVar('--series-1')), {
-        connectNulls: false,
-      })],
-      dataZoom: [{ type: 'inside', filterMode: 'none' }],
+      series: [{
+        name: '哨兵耗电', type: 'bar',
+        data: drainBars.map((m) => Math.round(m.value * 100) / 100),
+        barMaxWidth: 26,
+        itemStyle: { color: cssVar('--cat-sentry'), borderRadius: [4, 4, 0, 0], opacity: 0.92 },
+      }],
     }), { notMerge: true });
   }
 
@@ -1037,11 +1054,6 @@
     const o = S.overview;
     if (!o || !charts.efficiency || !o.efficiency) return;
     const pts = (o.efficiency.points || []).map((p) => [Number(p.start_ts), p.eff_wh_km]);
-    // 滑动平均(最近 7 次行程,不足则按已有次数)
-    const ma = pts.map((_, i) => {
-      const w = pts.slice(Math.max(0, i - 6), i + 1);
-      return [pts[i][0], w.reduce((s, p) => s + p[1], 0) / w.length];
-    });
     const effTip = (params) => {
       const p0 = params[0];
       let s = `<div style="color:${cssVar('--text-muted')};font-size:11px;margin-bottom:4px">` +
@@ -1049,7 +1061,7 @@
       params.forEach((p) => {
         s += `<div style="line-height:1.7"><span style="display:inline-block;width:14px;height:2px;` +
              `background:${p.color};vertical-align:middle;margin-right:6px"></span>` +
-             `<b>${fmtNum(p.value[1], 0)} Wh/km</b> <span style="color:${cssVar('--text-muted')}">${p.seriesName}</span></div>`;
+             `<b>${fmtNum(p.value[1], 0)} Wh/km</b></div>`;
       });
       const d = o.efficiency.points.find((x) => x.start_ts === Number(p0.axisValue));
       if (d) {
@@ -1059,30 +1071,32 @@
       }
       return s;
     };
+    const c = cssVar('--series-1');
+    // hex → rgba(供渐变填充用)
+    const h = c.replace('#', '');
+    const n = parseInt(h.length === 3 ? h.split('').map((x) => x + x).join('') : h, 16);
+    const fade = (a) => `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
     charts.efficiency.setOption(Object.assign({}, chartTheme(), {
       tooltip: Object.assign(tooltipAxis({}, (v) => fmtTime(v, true)), { formatter: effTip }),
-      legend: {
-        top: 0, left: 6, itemWidth: 14, itemHeight: 8, itemGap: isNarrow() ? 10 : 14,
-        textStyle: { color: cssVar('--text-secondary'), fontSize: 12 },
-      },
-      grid: trendGrid(34),
+      grid: trendGrid(24),
       xAxis: timeAxis(S.days),
       yAxis: Object.assign(axisCommon(), { type: 'value', min: 0,
         axisLabel: { color: cssVar('--text-muted'), fontSize: 11, formatter: '{value}' } }),
       series: [
-        {
-          name: '单次行程', type: 'scatter', data: pts, symbolSize: 9,
-          itemStyle: {
-            color: cssVar('--series-1'),
-            borderColor: cssVar('--surface-1'), borderWidth: 2,
-          },
-        },
-        Object.assign(lineSeries('滑动平均(7 次)', ma, cssVar('--series-2')), {
-          symbol: 'none',
-          endLabel: {
-            show: true, formatter: (p) => fmtNum(p.value[1], 0),
-            color: cssVar('--text-secondary'), fontSize: 11,
-            backgroundColor: cssVar('--surface-1'), padding: [2, 5], borderRadius: 4,
+        Object.assign(lineSeries('平均能耗', pts, c), {
+          // 平滑曲线 + 曲线下渐变填充;每次行程一个小圆点
+          smooth: true,
+          smoothMonotone: 'x',
+          showSymbol: true, symbol: 'circle', symbolSize: 6,
+          itemStyle: { color: c, borderColor: cssVar('--surface-1'), borderWidth: 1.5 },
+          areaStyle: {
+            color: {
+              type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+              colorStops: [
+                { offset: 0, color: fade(0.28) },
+                { offset: 1, color: fade(0.02) },
+              ],
+            },
           },
         }),
       ],
@@ -1210,7 +1224,7 @@
       b.classList.toggle('on', Number(b.dataset.idx) === S.cycleIdx));
 
     /* --- 能量占比环:围绕玻璃顶一圈(自顶点顺时针),pathLength=100 归一化 --- */
-    const RING_KEYS = ['uncharged', 'idle', 'climate', 'sentry', 'drive', 'remaining'];
+    const RING_KEYS = ['uncharged', 'idle', 'sentry', 'drive', 'remaining'];
     const GAP = 0.8;  // 段间缝隙(占环长 %)
     const setRing = (k, start, len) => {
       const p = $(`#carring-${k}`);
@@ -1230,10 +1244,10 @@
       });
     } else {
       // 顶点起第一段斜纹 = 本次未充(100% − 充至电量);充入区各段按估算值归一化填满
+      // (驻车耗电后端已合并:驻车开空调 + 休眠掉电;哨兵单列)
       const inner = [
         ['uncharged', Number(cyc.uncharged_pct), true],
         ['idle', Number(cyc.idle_pct), false],
-        ['climate', Number(cyc.climate_pct), false],
         ['sentry', Number(cyc.sentry_pct), false],
         ['drive', Number(cyc.drive_pct), false],
         ['remaining', Number(cyc.remaining_pct), false],
@@ -1347,12 +1361,11 @@
       }
     }
 
-    /* --- 右列:全部电耗分段(未充/驻车耗电/驻车空调/哨兵/行驶/剩余,与车身分带点选联动) --- */
+    /* --- 右列:全部电耗分段(未充/驻车耗电/哨兵/行驶/剩余,与车身分带点选联动) --- */
     const cap = cyc && cyc.cap_kwh ? Number(cyc.cap_kwh) : 84;
     const itemsR = [
       { k: 'uncharged', name: '本次未充', pct: cyc ? Number(cyc.uncharged_pct) : null, hatch: true },
       { k: 'idle', name: '驻车耗电', pct: cyc ? Number(cyc.idle_pct) : null, color: 'var(--cat-idle)' },
-      { k: 'climate', name: '驻车空调', pct: cyc ? Number(cyc.climate_pct) : null, color: 'var(--cat-climate)' },
       { k: 'sentry', name: '哨兵', pct: cyc ? Number(cyc.sentry_pct) : null, color: 'var(--cat-sentry)' },
       { k: 'drive', name: '行驶', pct: cyc ? Number(cyc.drive_pct) : null, color: 'var(--cat-drive)' },
       { k: 'remaining', name: cyc && !cyc.active ? '周期末剩余' : '当前剩余',

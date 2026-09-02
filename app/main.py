@@ -1227,7 +1227,8 @@ def activity(car_id: int | None = Query(default=None),
 @app.get("/api/efficiency/trend")
 def efficiency_trend(car_id: int | None = Query(default=None),
                      days: int = Query(default=30, ge=1, le=90)):
-    """每次行程的平均能耗(Wh/km)时间轴,由理想续航差值 × 校准系数估算。"""
+    """每次行程的平均能耗(Wh/km)时间轴,由理想续航差值 × 校准系数估算。
+    只统计超过 2 km 的行程(挪车等短行程能耗失真,不计入)。"""
     cid = get_car_id(car_id)
     ratio = kwh_per_ideal_km(cid)
     rows = q(
@@ -1240,7 +1241,7 @@ def efficiency_trend(car_id: int | None = Query(default=None),
         LEFT JOIN addresses a1 ON a1.id = d.start_address_id
         LEFT JOIN addresses a2 ON a2.id = d.end_address_id
         WHERE d.car_id = %s AND d.start_date >= now() - make_interval(days => %s)
-          AND d.distance > 0.5
+          AND d.distance > 2
         ORDER BY d.start_date
         """,
         (cid, days),
@@ -1313,8 +1314,8 @@ def energy_cycles(car_id: int | None = Query(default=None),
 
     相邻两次充电间隔 <30 分钟或间隔内无行驶的,合并为同一周期(充电中断续充)。
     每段:充至电量 level_after;未充 = 100 - level_after;周期内行驶能耗按
-    理想续航差值 × 校准系数折算;哨兵/驻车空调/驻车(休眠)耗电由电量采样分段
-    (_split_segments),单位均为电池 %。周期末剩余 = 下次充电起始电量,
+    理想续航差值 × 校准系数折算;哨兵/驻车耗电(含驻车空调与休眠掉电)由
+    电量采样分段(_split_segments),单位均为电池 %。周期末剩余 = 下次充电起始电量,
     进行中的周期 = 当前可用电量。
     """
     cid = get_car_id(car_id)
@@ -1412,10 +1413,9 @@ def energy_cycles(car_id: int | None = Query(default=None),
                    for c in grp[1:]]
         seg = _split_segments(cyc_samples, cyc_iv)
         sentry_pct = max(0.0, -sum(p["delta"] for p in seg["sentry"]))
-        climate_pct = max(0.0, -sum(p["delta"] for p in seg["idle"]
-                                    if p["kind"] == "climate"))
-        idle_pct = max(0.0, -sum(p["delta"] for p in seg["idle"]
-                                 if p["kind"] != "climate"))
+        # 驻车耗电合并:驻车开空调(kind='climate')与休眠间隙掉电(kind='asleep')
+        # 都算「车未行驶时的耗电」,哨兵(驻车清醒且无空调)单列
+        idle_pct = max(0.0, -sum(p["delta"] for p in seg["idle"]))
         drive_kwh = sum(k for a, _, k, _ in drives if s <= a < e)
         drive_km = sum(km for a, _, _, km in drives if s <= a < e)
         # 合并组的满电容量:总充电量 ÷ 总增幅,比单次更稳
@@ -1431,7 +1431,7 @@ def energy_cycles(car_id: int | None = Query(default=None),
         remaining = int(nxt["start_battery_level"]) if nxt else usable_now
         if remaining is None:  # 无最新电量:用残差兜底
             remaining = max(0.0, level_after - drive_kwh / cap * 100
-                            - sentry_pct - climate_pct - idle_pct)
+                            - sentry_pct - idle_pct)
         cycles_all.append({
             "charge_id": last["id"],
             "charge_count": len(grp),
@@ -1444,7 +1444,6 @@ def energy_cycles(car_id: int | None = Query(default=None),
             "drive_kwh": round(drive_kwh, 2),
             "drive_km": round(drive_km, 1),
             "sentry_pct": round(sentry_pct, 1),
-            "climate_pct": round(climate_pct, 1),
             "idle_pct": round(idle_pct, 1),
             "remaining_pct": round(float(remaining), 1),
             "active": nxt is None,

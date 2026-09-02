@@ -142,11 +142,10 @@
               <rect x="90" y="150" width="160" height="250" clip-path="url(#car-glass-clip)" fill="url(#car-glass-shine)" pointer-events="none"/>
               <!-- 玻璃顶描边 -->
               <path class="car-glass-line" d="M170 162 C210 162 238 168 242 190 C244 230 244 300 240 342 C238 370 208 384 170 384 C132 384 102 370 100 342 C96 300 96 230 98 190 C102 168 130 162 170 162 Z"/>
-              <!-- 能量占比环:围绕玻璃顶一圈(自顶点顺时针:未充 / 驻车耗电 / 驻车空调 / 哨兵 / 行驶 / 剩余) -->
+              <!-- 能量占比环:围绕玻璃顶一圈(自顶点顺时针:未充 / 驻车耗电 / 哨兵 / 行驶 / 剩余) -->
               <g class="car-ring">
                 <path id="carring-uncharged" class="carring" pathLength="100" stroke="url(#car-hatch)" stroke-dasharray="0 100" d="M170 158 C211 158 241 164 246 189 C249 230 249 301 244 344 C242 374 210 388 170 388 C130 388 98 374 96 344 C91 301 91 230 94 189 C99 164 129 158 170 158 Z"/>
                 <path id="carring-idle" class="carring carring-idle" pathLength="100" stroke-dasharray="0 100" d="M170 158 C211 158 241 164 246 189 C249 230 249 301 244 344 C242 374 210 388 170 388 C130 388 98 374 96 344 C91 301 91 230 94 189 C99 164 129 158 170 158 Z"/>
-                <path id="carring-climate" class="carring carring-climate" pathLength="100" stroke-dasharray="0 100" d="M170 158 C211 158 241 164 246 189 C249 230 249 301 244 344 C242 374 210 388 170 388 C130 388 98 374 96 344 C91 301 91 230 94 189 C99 164 129 158 170 158 Z"/>
                 <path id="carring-sentry" class="carring carring-sentry" pathLength="100" stroke-dasharray="0 100" d="M170 158 C211 158 241 164 246 189 C249 230 249 301 244 344 C242 374 210 388 170 388 C130 388 98 374 96 344 C91 301 91 230 94 189 C99 164 129 158 170 158 Z"/>
                 <path id="carring-drive" class="carring carring-drive" pathLength="100" stroke-dasharray="0 100" d="M170 158 C211 158 241 164 246 189 C249 230 249 301 244 344 C242 374 210 388 170 388 C130 388 98 374 96 344 C91 301 91 230 94 189 C99 164 129 158 170 158 Z"/>
                 <path id="carring-remaining" class="carring carring-remaining" pathLength="100" stroke-dasharray="0 100" d="M170 158 C211 158 241 164 246 189 C249 230 249 301 244 344 C242 374 210 388 170 388 C130 388 98 374 96 344 C91 301 91 230 94 189 C99 164 129 158 170 158 Z"/>
@@ -278,7 +277,7 @@
     <div class="card col-12">
       <div class="card-head">
         <div>
-          <h2>哨兵时间轴与耗电曲线</h2>
+          <h2>哨兵时间轴与每日耗电</h2>
           <div class="card-sub">哨兵时段为按「驻车保持清醒 + 电量下降」推断(车辆不直接上报哨兵状态)</div>
         </div>
         <div class="mini-stats" id="sentry-stats"></div>
@@ -290,7 +289,7 @@
         </div>
         <div class="sentry-pane">
           <div class="pane-head">
-            <h3>哨兵耗电曲线</h3>
+            <h3>每天哨兵耗电总和</h3>
             <div class="seg mini batt-toggle" role="group" aria-label="电量/度数/里程切换">
               <button data-mode="pct" class="on">电量 %</button>
               <button data-mode="kwh">度数 kWh</button>
@@ -300,6 +299,12 @@
           <div class="chart" id="chart-sentry-drain"></div>
         </div>
       </div>
+    </div>
+
+    <div class="card col-12">
+      <h2>平均能耗变化</h2>
+      <div class="card-sub">每次行程 Wh/km(只统计超过 2 km 的行程),按理想续航差值 × 校准系数估算</div>
+      <div class="chart" id="chart-efficiency"></div>
     </div>
   </div>
   </section>
@@ -345,12 +350,6 @@
       <h2>每日行驶里程</h2>
       <div class="card-sub">按出发日统计</div>
       <div class="chart" id="chart-daily"></div>
-    </div>
-
-    <div class="card col-12">
-      <h2>平均能耗变化</h2>
-      <div class="card-sub">每次行程 Wh/km(点)+ 滑动平均(线),按理想续航差值 × 校准系数估算</div>
-      <div class="chart" id="chart-efficiency"></div>
     </div>
   </div>
   </section>
