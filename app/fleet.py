@@ -299,7 +299,7 @@ def callback(request: Request):
                     outcome = "success"
                 except HTTPException:
                     outcome = "failed"
-    response = RedirectResponse("/fleet.html?fleet=" + outcome, status_code=303)
+    response = RedirectResponse("/?fleet=" + outcome, status_code=303)
     response.headers["Cache-Control"] = "no-store"
     return response
 

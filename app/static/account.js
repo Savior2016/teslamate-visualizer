@@ -55,14 +55,7 @@
     }
   }
 
-  let guideInitialized = false;
   function renderStatus(s) {
-    $('account-admin').hidden = s.role !== 'admin';
-    $('backup-admin').hidden = s.role !== 'admin';
-    if (!guideInitialized) {
-      $('authorization-guide').open = !s.steps.authorized;
-      guideInitialized = true;
-    }
     $('acct-user-name').textContent = s.user || '—';
 
     const banner = $('tesla-banner');
@@ -93,16 +86,16 @@
       $('stat-last').textContent = fmtAgo(s.sync.last_data_ts);
     }
 
-    renderUsers(s.users || [], s.user, s.roles || {});
+    renderUsers(s.users || [], s.user);
   }
 
-  function renderUsers(users, me, roles) {
+  function renderUsers(users, me) {
     const ul = $('user-list');
     ul.textContent = '';
     for (const u of users) {
       const li = document.createElement('li');
       const name = document.createElement('span');
-      name.textContent = `${u} · ${roles[u] === 'admin' ? '管理员' : '只读'}`;
+      name.textContent = u;
       li.appendChild(name);
       if (u === me) {
         const tag = document.createElement('span');
@@ -191,7 +184,7 @@
       await api('/api/account/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password, role: $('nu-role').value }),
+        body: JSON.stringify({ username, password }),
       });
       msg(m, `✓ 已添加账号 ${username}`, true);
       $('nu-name').value = '';
@@ -217,8 +210,8 @@
 
   $('bk-export').onclick = async () => {
     const button = $('bk-export');
-    const password = $('bk-password').value;
-    if (!password) return msg(bkMsg, '请输入当前密码确认导出', false);
+    const password = $('pw-current').value;
+    if (!password) { msg(bkMsg, '请在上方“当前密码”输入框填写面板密码，再点击导出备份', false); $('pw-current').focus(); return; }
     button.disabled = true;
     msg(bkMsg, '正在生成备份，请等待下载完成…', true);
     try {
@@ -240,10 +233,12 @@
     } catch (e) {
       msg(bkMsg, e.message, false);
     } finally {
-      $('bk-password').value = '';
+      $('pw-current').value = '';
       button.disabled = false;
     }
   };
+
+  $('bk-import').onclick = () => msg(bkMsg, '数据库恢复需要在服务器维护期间执行，操作说明见仓库 docs/MAINTENANCE.md', false);
 
   loadStatus();
   pollTimer = setInterval(loadStatus, 15000); // 授权完成前每 15 秒自动刷新状态

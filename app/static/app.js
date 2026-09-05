@@ -340,11 +340,7 @@
     badge.dataset.state = o.state;
     $('#state-text').textContent = STATE_LABEL[o.state] || o.state;
     $('#sw-version').textContent = o.software_version ? `v${o.software_version}` : '';
-    const age = o.latest ? Math.max(0, (Date.now() - Number(o.latest.date_ts)) / 3600000) : null;
-    const stale = age === null || age > 1;
-    $('#updated-at').textContent = o.latest ? `上次上报 ${fmtTime(Number(o.latest.date_ts))}${stale ? ` · ${age.toFixed(1)} 小时前` : ''}` : '暂无数据';
-    $('#data-freshness').textContent = stale ? '当前显示上次上报数据；车辆休眠或离线时不会持续更新。' : '显示车辆最近上报的数据。';
-    $('#data-freshness').classList.toggle('stale', stale);
+    $('#updated-at').textContent = o.latest ? `数据更新 ${fmtTime(Number(o.latest.date_ts))}` : '暂无数据';
 
     // 电量胶囊:跟随全局 电量%⇄度数kWh⇄里程km 模式;里程直接用最新额定续航
     const lat = o.latest;
@@ -1296,10 +1292,13 @@
     const bh = S.health;
     const bhItem = el('div', 'cl-item cl-stat');
     const bhTx = el('div');
-    bhTx.appendChild(el('b', '', '容量相对估算'));
-    bhTx.appendChild(el('span', 'cl-sub', '非官方 SOH · 充电样本估算'));
+    bhTx.appendChild(el('b', '', '电池健康'));
     const bhHas = bh && bh.health_pct !== null && bh.health_pct !== undefined;
     const bhVal = el('span', 'cl-val', bhHas ? `${fmtNum(bh.health_pct, 1)} %` : '—');
+    if (bhHas) {
+      bhVal.style.color =
+        bh.health_pct >= 97 ? '#3fae72' : bh.health_pct >= 90 ? '#fab219' : '#d03b3b';
+    }
     bhTx.appendChild(bhVal);
     bhTx.appendChild(el('span', 'cl-sub', bhHas
       ? `估算 ${fmtNum(bh.current_kwh, 1)} / 基准 ${fmtNum(bh.nominal_kwh, 1)} kWh`
@@ -1334,11 +1333,7 @@
     const outT = lat && lat.outside_temp != null ? Number(lat.outside_temp) : null;
     $('#car-center-temp').textContent = inT === null ? '—' : `车内 ${fmtNum(inT, 1)}°`;
     $('#car-temp-val').textContent = outT === null ? '—' : `${fmtNum(outT, 1)}°`;
-    $('#reading-inside').textContent = inT === null ? '—' : `${fmtNum(inT, 1)} °C`;
-    $('#reading-outside').textContent = outT === null ? '—' : `${fmtNum(outT, 1)} °C`;
-    $('#reading-odo').textContent = odo === null ? '—' : `${fmtNum(odo, 0)} km`;
     renderCompanion();
-    $('#reading-companion').textContent = $('#car-companion').textContent;
 
     // 车辆顶部:本周期平均能耗细长条(官方能耗=额定折算系数,作标点)
     const effG = $('#car-eff');
@@ -1421,8 +1416,6 @@
       const t = $(`#tpms-on-${key}`);
       if (!t) return;
       t.textContent = lastV === null ? '—' : fmtNum(lastV, 1);
-      const reading = $(`#reading-${key}`);
-      reading.textContent = lastV === null ? '—' : `${fmtNum(lastV, 1)} bar`;
       t.style.fill = lastV === null ? 'var(--text-muted)' : tpmsColor(lastV);
     });
   }
@@ -1867,8 +1860,8 @@
       t.appendChild(el('b', '', value));
       stats.appendChild(t);
     };
-    stat('本月', `¥${fmtNum(S.parking.month_total, 2)}`);
-    stat('累计', `¥${fmtNum(S.parking.total, 2)}`);
+    stat('本月', `¥${fmtNum(S.parking.month_total || 0, 2)}`);
+    stat('累计', `¥${fmtNum(S.parking.total || 0, 2)}`);
 
     const fees = S.parking.fees || [];
     if (!fees.length) {
@@ -1903,7 +1896,7 @@
     const t = $('#car-companion');
     if (!t) return;
     if (!S.delivery) {
-      t.textContent = S.role === 'viewer' ? '未设置提车日期' : '点这里设置提车日期';
+      t.textContent = '点这里设置提车日期';
       t.classList.add('is-empty');
       return;
     }
@@ -2153,7 +2146,7 @@
       rs.forEach((r) => {
         const row = el('div', 'rt-row');
         row.appendChild(el('span', 'rt-time', fmtClock(Number(r.start_date_ts))));
-        row.appendChild(el('span', 'rt-names', `${r.start_name || '—'} → ${r.end_name || '—'}`));
+        row.appendChild(el('span', 'rt-names', `${escapeHTML(r.start_name || '—')} → ${escapeHTML(r.end_name || '—')}`));
         row.appendChild(el('span', 'rt-dist', `${fmtNum(r.distance, 1)} km`));
         row.appendChild(el('span', 'rt-dur', `${fmtNum(r.duration_min, 0)} 分`));
         row.appendChild(el('span', 'chev rt-chev', '▾'));
@@ -2190,18 +2183,9 @@
     });
   }
 
-  function applyPermission(role) {
-    S.role = role || S.role;
-    const viewer = S.role === 'viewer';
-    document.body.classList.toggle('read-only', viewer);
-    document.querySelectorAll('#cs-card input, #cs-card select, #pk-card input, #pk-card button, #ctl-main button, #ctl-main input').forEach((n) => { n.disabled = viewer; });
-    $('#access-note').hidden = !viewer;
-  }
-
   /* ---------- 数据加载 ---------- */
 
   async function fetchJSON(url, opts) {
-    if (S.role === 'viewer' && opts && opts.method && opts.method !== 'GET') throw new Error('当前账号为只读');
     const res = await fetch(url, opts);
     if (res.status === 401) {  // 会话失效:回登录页,登录后原路返回
       location.href = '/login?next=' + encodeURIComponent(location.pathname);
@@ -2216,43 +2200,25 @@
     return fetchJSON('/api/' + path + q);
   }
 
-  let refreshing = false;
-  const lastGood = new Map();
   async function refresh() {
-    if (refreshing) return;
-    refreshing = true;
-    const failed = [];
-    const optional = async (path, fallback, label) => {
-      try {
-        const value = await api(path);
-        lastGood.set(path, value);
-        return value;
-      } catch (err) {
-        failed.push(label);
-        return lastGood.get(path) ?? fallback;
-      }
-    };
     try {
       const o = await api('overview');
-      applyPermission(o.role);
       if (S.carId === null) S.carId = o.car_id;
-      S.overview = { ...S.overview, ...o };
-      renderHeader();
       const [daily, chg, routes, act, eff, tpms, sys, health, sessions, cyc, temp, tpms24, pk, del] = await Promise.all([
-        optional(`drives/daily?days=${S.days}`, { days_rows: [] }, '每日里程'),
-        optional('charging/summary?limit=12', { sessions: [] }, '最近充电'),
-        optional(`routes?days=${S.days}`, { routes: [] }, '行程'),
-        optional(`activity?days=${S.days}`, null, '活动'),
-        optional(`efficiency/trend?days=${S.days}`, { points: [] }, '能耗'),
-        optional(`tpms/trend?days=${S.days}`, { wheels: {} }, '胎压'),
-        optional('system', {}, '系统状态'),
-        optional('battery/health', null, '容量估算'),
-        optional(`charging/sessions?days=${S.days}`, null, '充电详情'),
-        optional('energy/cycles?limit=10', null, '充电周期'),
-        optional(`temp/trend?days=${S.days}`, {}, '温度'),
-        optional('tpms/trend?days=1', { wheels: {} }, '最新胎压'),
-        optional('parking/fees', { fees: [], month_total: null, total: null }, '停车费'),
-        optional('vehicle/delivery', { date: null }, '车辆档案'),
+        api(`drives/daily?days=${S.days}`),
+        api('charging/summary?limit=12'),
+        api(`routes?days=${S.days}`),
+        api(`activity?days=${S.days}`),
+        api(`efficiency/trend?days=${S.days}`),
+        api(`tpms/trend?days=${S.days}`),
+        api('system'),
+        api('battery/health'),
+        api(`charging/sessions?days=${S.days}`),
+        api('energy/cycles?limit=10'),
+        api(`temp/trend?days=${S.days}`),
+        api('tpms/trend?days=1'),
+        api('parking/fees'),
+        api('vehicle/delivery'),
       ]);
       S.overview = {
         ...o,
@@ -2291,17 +2257,10 @@
       renderEfficiency();
       renderTpms();
       renderTemp();
-      applyPermission(o.role);
     } catch (err) {
       $('#state-text').textContent = '数据连接失败';
       $('#updated-at').textContent = 'API 请求失败,稍后自动重试';
       console.error(err);
-    } finally {
-      refreshing = false;
-      if (S.role) applyPermission(S.role);
-      const warning = $('#load-warning');
-      warning.hidden = !failed.length;
-      warning.textContent = failed.length ? `${failed.join('、')}暂时不可用；显示上次结果或占位，其他数据正常加载。` : '';
     }
   }
 
@@ -2333,7 +2292,6 @@
   function switchTab(name, save) {
     if (!PAGE_IDS.includes(name)) name = 'overview';
     if (save !== false) localStorage.setItem('ttv-tab', name);
-    window.scrollTo({ top: 0, behavior: 'instant' });
     document.querySelectorAll('.page').forEach((p) =>
       p.classList.toggle('active', p.id === 'page-' + name));
     document.querySelectorAll('.tabbar .tab').forEach((t) => {
@@ -2406,10 +2364,10 @@
         if (lab) lab.textContent = label;
       }
     };
-    setZone('lock', s.locked === true, s.locked == null ? '车锁未知' : (s.locked ? '曾锁车' : '曾解锁'));
+    setZone('lock', s.locked === true, s.locked == null ? '车锁' : (s.locked ? '已锁' : '未锁'));
     const lockZone = car.querySelector('[data-zone="lock"]');
     if (lockZone) lockZone.classList.toggle('unlocked', s.locked === false);
-    setZone('sentry', s.sentry === true, s.sentry == null ? '哨兵' : (s.sentry ? '曾开哨兵' : '曾关哨兵'));
+    setZone('sentry', s.sentry === true, s.sentry == null ? '哨兵' : (s.sentry ? '哨兵·开' : '哨兵·关'));
     setZone('windows', s.windows_open === true, s.windows_open == null ? '车窗' : (s.windows_open ? '通风中' : '车窗'));
     const climateLab = s.climate_on
       ? `空调·${(s.climate_temp != null ? Number(s.climate_temp).toFixed(1) : ctlTemp.toFixed(1))}°`
@@ -2426,11 +2384,11 @@
     // 状态胶囊
     const tri = (v, onText, offText) => (v == null ? '未知' : (v ? onText : offText));
     const chips = [
-      ['上次指令·车锁', tri(s.locked, '锁车', '解锁'), s.locked === true, 'var(--series-3)'],
-      ['上次指令·哨兵', tri(s.sentry, '开启', '关闭'), s.sentry === true, 'var(--cat-sentry)'],
-      ['上次上报·空调', tri(s.climate_on, '开启', '关闭'), s.climate_on === true, 'var(--series-1)'],
-      ['上次指令·车窗', tri(s.windows_open, '通风', '关闭'), s.windows_open === true, 'var(--seq-blue-300)'],
-      ['上次上报·充电', s.charging == null ? '未知' : (s.charging ? '充电中' : '未充电'), s.charging === true, 'var(--cat-charge)'],
+      ['车锁', tri(s.locked, '已锁', '未锁'), s.locked === true, 'var(--series-3)'],
+      ['哨兵', tri(s.sentry, '开启', '关闭'), s.sentry === true, 'var(--cat-sentry)'],
+      ['空调', s.climate_on ? '开启' : '关闭', s.climate_on === true, 'var(--series-1)'],
+      ['车窗', tri(s.windows_open, '通风', '关闭'), s.windows_open === true, 'var(--seq-blue-300)'],
+      ['充电', s.charging ? '充电中' : (s.cable ? '已插枪' : '未插枪'), s.charging === true, 'var(--cat-charge)'],
     ];
     const box = $('#ctl-chips');
     if (box) {
@@ -2518,7 +2476,6 @@
   }
 
   async function sendCmd(cmd, args, btn, label, confirmText) {
-    if (S.role === 'viewer') { ctlToast('当前账号为只读，不能操作车辆', false); return; }
     if (ctlConfigured === false) {  // 未接入:预览态,点击只提示
       ctlToast('尚未接入指令后端,按钮仅为预览;配置方法见页面底部「帮助」', false);
       return;
@@ -2747,5 +2704,3 @@
 
   document.addEventListener('DOMContentLoaded', init);
 })();
-
-window.addEventListener("load", () => { if (location.hash === "#control") document.querySelector('.tab[data-page="control"]')?.click(); });

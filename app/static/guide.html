@@ -1,1 +1,204 @@
-<!DOCTYPE html><html lang="zh-CN" data-theme="dark"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>车辆控制帮助 · TESLA Home</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/fleet.css"><script src="/theme.js"></script></head><body><main class="wrap fleet-wrap"><header class="fleet-header"><a href="/#control">← 返回控制</a><h1>车辆控制帮助</h1></header><section class="card"><h2>已有客户端 ID 和客户端密钥</h2><p>打开接入设置，填写应用信息，注册公钥，然后完成 Tesla 账号授权和虚拟钥匙配对。页面会显示域名、回调地址和每一步的状态。</p><a href="/fleet.html">开始接入 →</a><p>中国大陆车辆需在 developer.tesla.cn 创建应用；其他地区使用 developer.tesla.com。接入设置仅限管理员。</p></section><section class="card"><h2>控制指令如何发送</h2><p>面板把控制指令交给服务器内的官方签名代理，由代理签名后发送给 Tesla。客户端密钥和授权令牌加密保存在服务器，签名私钥单独保存在服务器数据目录，浏览器不会读取这些密钥。</p><p>只有完成 Tesla 账号授权并在 Tesla App 中配对虚拟钥匙，车辆才会接受受保护的指令。页面中的“已确认配对”是你的确认记录，实际是否配对成功以 Tesla App 和指令结果为准。</p></section><section class="card"><h2>使用已有托管服务</h2><p>原有 CONTROL_API_URL 和 CONTROL_API_TOKEN 配置仍受支持。使用托管服务时，请按服务商指引配置回调和配对，不要把客户端密钥当成 API Token。完成自建接入后，面板优先使用自建代理。</p></section><section class="card"><h2>常见问题</h2><p>注册失败：检查应用是否获批、车辆地区、允许的源 URL 和公开公钥是否正确。授权失败：检查重定向 URI 完全一致，并在同一浏览器重新开始授权。</p><p>控制失败：检查虚拟钥匙、车辆是否在线，以及应用的车辆控制和充电权限。唤醒后可能需要稍等再发送指令。只读账号无法发送控制指令。</p><p>Fleet API 费用以 Tesla 开发者后台为准。建议先在车辆附近手动测试闪灯；解锁和打开行李箱等操作前请确认周围环境。</p><a href="https://developer.tesla.cn/docs/fleet-api" target="_blank" rel="noopener noreferrer">Tesla 官方文档</a></section></main></body></html>
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0d0d0d">
+  <title>帮助 · TESLA Home</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/theme.js"></script>
+  <style>
+    .guide-wrap { max-width: 780px; }
+    .guide-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+    .guide-header h1 { font-size: 20px; margin: 0; font-weight: 600; }
+    .guide-back {
+      color: var(--text-secondary); text-decoration: none; font-size: 13px;
+      border: 1px solid var(--border); border-radius: 8px; padding: 5px 10px;
+    }
+    .guide-back:hover { color: var(--text-primary); border-color: var(--baseline); }
+    .guide-wrap .card { margin-bottom: 14px; }
+    .guide-wrap h2 { margin-top: 0; }
+    .guide-wrap p, .guide-wrap li { font-size: 14px; line-height: 1.9; color: var(--text-secondary); }
+    .guide-wrap b, .guide-wrap strong { color: var(--text-primary); }
+    .guide-wrap code {
+      background: var(--page); border: 1px solid var(--border); border-radius: 5px;
+      padding: 1px 6px; font-size: 12.5px; word-break: break-all;
+    }
+    .guide-wrap pre {
+      background: var(--page); border: 1px solid var(--border); border-radius: 10px;
+      padding: 12px 14px; overflow-x: auto; font-size: 12.5px; line-height: 1.7;
+    }
+    .guide-wrap pre code { background: none; border: 0; padding: 0; }
+    .guide-wrap a { color: var(--series-1); }
+    .arch {
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      flex-wrap: wrap; padding: 14px; border: 1px dashed var(--baseline);
+      border-radius: 12px; font-size: 13px; margin: 10px 0 4px;
+    }
+    .arch .node {
+      border: 1px solid var(--border); background: var(--page);
+      border-radius: 8px; padding: 6px 12px; font-weight: 600; color: var(--text-primary);
+    }
+    .arch .arrow { color: var(--text-muted); }
+    .steps { list-style: none; margin: 0; padding: 0; counter-reset: step; }
+    .steps > li {
+      position: relative; padding: 10px 12px 10px 46px; counter-increment: step;
+      border-left: 2px solid var(--gridline); margin-left: 13px;
+    }
+    .steps > li:last-child { border-left-color: transparent; }
+    .steps > li::before {
+      content: counter(step); position: absolute; left: -14px; top: 10px;
+      width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
+      font-size: 13px; font-weight: 600; background: var(--surface-1);
+      border: 2px solid var(--baseline); color: var(--text-muted);
+    }
+    .steps h3 { margin: 0 0 4px; font-size: 14px; font-weight: 600; }
+    .steps .desc { font-size: 13.5px; color: var(--text-secondary); line-height: 1.9; }
+    .pick {
+      display: inline-block; font-size: 11px; font-weight: 600; border-radius: 4px;
+      padding: 1px 7px; margin-left: 8px; vertical-align: 2px;
+      color: var(--series-3); border: 1px solid currentColor;
+    }
+    .warn-box {
+      border: 1px solid color-mix(in srgb, var(--series-4) 50%, transparent);
+      background: color-mix(in srgb, var(--series-4) 8%, transparent);
+      border-radius: 10px; padding: 10px 14px; font-size: 13px; line-height: 1.8;
+      color: var(--text-secondary); margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+<div class="wrap guide-wrap">
+
+  <header class="guide-header">
+    <a class="guide-back" href="/">← 返回面板</a>
+    <h1>车辆控制 · 帮助</h1>
+  </header>
+
+  <section class="card">
+    <h2>工作原理</h2>
+    <p>
+      新固件特斯拉只接受<b>端到端签名</b>的控制指令(Vehicle Command Protocol),面板本身不保存
+      Tesla 凭证,而是把指令转发给你配置的「<b>指令后端</b>」——由它签名并下发:
+    </p>
+    <div class="arch">
+      <span class="node">TESLA Home 面板</span><span class="arrow">→</span>
+      <span class="node">指令后端(签名)</span><span class="arrow">→</span>
+      <span class="node">Tesla 云端</span><span class="arrow">→</span>
+      <span class="node">你的车</span>
+    </div>
+    <p>
+      指令后端两种选择:<b>托管服务</b>(注册即用,推荐)或<b>自建官方代理</b>(完全自主,免费额度内 $0)。
+      两种都只需在 <code>.env</code> 填两个值:<code>CONTROL_API_URL</code> 和 <code>CONTROL_API_TOKEN</code>。
+    </p>
+  </section>
+
+  <section class="card">
+    <h2>方案一:托管服务 <span class="pick">推荐 · 约 10 分钟</span></h2>
+    <p>MyTeslaMate(按量计费,无月租)或 Teslemetry(包月)会代管密钥与签名,省去全部基础设施。</p>
+    <ol class="steps">
+      <li>
+        <h3>注册托管服务</h3>
+        <div class="desc">打开 <a href="https://www.myteslamate.com" target="_blank" rel="noopener">myteslamate.com</a>
+          或 <a href="https://teslemetry.com" target="_blank" rel="noopener">teslemetry.com</a> 注册账号,
+          按他们的指引创建 Tesla 开发者应用(公钥由他们托管)。</div>
+      </li>
+      <li>
+        <h3>Tesla 账号授权</h3>
+        <div class="desc">用 Tesla 账号在托管服务页面登录授权,授权范围勾选<b>车辆数据</b>与<b>车辆控制</b>
+          (vehicle_cmds / vehicle_charging_cmds)。</div>
+      </li>
+      <li>
+        <h3>配对虚拟钥匙(Virtual Key)</h3>
+        <div class="desc">在手机上打开托管服务提供的配对链接 / 二维码,会跳转 <b>Tesla App</b>
+          确认配对;车内屏幕无需操作。这一步把「允许该应用控制车辆」写进你的车。</div>
+      </li>
+      <li>
+        <h3>拿到 API Token 填入 .env</h3>
+        <div class="desc">在服务器编辑 <code>~/teslamate-visualizer/.env</code>:
+          <pre><code>CONTROL_API_URL=https://api.teslemetry.com   # 以服务商页面为准
+CONTROL_API_TOKEN=粘贴你的 Token
+CONTROL_VIN=          # 留空 = 自动取数据库第一辆车</code></pre>
+        </div>
+      </li>
+      <li>
+        <h3>重启面板</h3>
+        <div class="desc"><code>cd ~/teslamate-visualizer && docker compose up -d</code>
+          (环境变量改动无需重新构建)。回到面板「控制」页,点「闪灯」实测。</div>
+      </li>
+    </ol>
+  </section>
+
+  <section class="card">
+    <h2>方案二:自建官方代理(全自主)</h2>
+    <p>使用特斯拉官方开源的 <code>tesla-http-proxy</code>
+      (<a href="https://github.com/teslamotors/vehicle-command" target="_blank" rel="noopener">github.com/teslamotors/vehicle-command</a>),
+      适合想完全掌控密钥的场景。需要你有一个域名(本面板的域名即可)。</p>
+    <ol class="steps">
+      <li>
+        <h3>注册 Tesla 开发者应用</h3>
+        <div class="desc">打开 <a href="https://developer.tesla.com" target="_blank" rel="noopener">developer.tesla.com</a>
+          → Dashboard → 创建应用:填应用名、<b>域名</b>(如 www.friday-keeper.icu)、回调 URL;
+          <b>中国区车辆区域选 China</b>。创建后得到 <b>Client ID / Client Secret</b>。</div>
+      </li>
+      <li>
+        <h3>生成密钥对(虚拟钥匙的"钥匙")</h3>
+        <div class="desc">在服务器执行:
+          <pre><code>openssl ecparam -name prime256v1 -genkey -noout -out private-key.pem
+openssl ec -in private-key.pem -pubout -out public-key.pem</code></pre>
+          <b>private-key.pem 是签名私钥,绝不外传</b>,只交给本机的 tesla-http-proxy 容器。</div>
+      </li>
+      <li>
+        <h3>托管公钥(本面板已内置)</h3>
+        <div class="desc">Tesla 要求从你的域名拉取公钥验证身份。把 <code>public-key.pem</code> 复制为
+          <code>~/teslamate-visualizer/data/tesla-public-key.pem</code>,面板会自动在
+          <code>https://&lt;你的域名&gt;/.well-known/appspecific/com.tesla.3p.public-key.pem</code>
+          提供(公开路径,无需登录)。浏览器访问该地址确认能下载再继续。</div>
+      </li>
+      <li>
+        <h3>注册 partner account</h3>
+        <div class="desc">用 Client ID 换 partner token 后,向 Fleet API 注册域名(以官方文档
+          <a href="https://developer.tesla.com/docs/fleet-api" target="_blank" rel="noopener">fleet-api</a>
+          的 <code>POST /api/1/partner_accounts</code> 为准,中国区用
+          <code>fleet-api.prd.cn.vn.cloud.tesla.cn</code>)。</div>
+      </li>
+      <li>
+        <h3>运行 tesla-http-proxy</h3>
+        <div class="desc">Docker 启动官方代理,挂载 <code>private-key.pem</code>,加入面板所在 docker 网络;
+          代理会对外暴露与 Fleet API 同形态的 <code>/api/1/vehicles/&lt;vin&gt;/command/&lt;cmd&gt;</code> 端点。</div>
+      </li>
+      <li>
+        <h3>OAuth 拿用户令牌</h3>
+        <div class="desc">按官方认证流程(authorization code flow)用 Tesla 账号授权,scope 至少包含
+          <code>openid offline_access vehicle_device_data vehicle_cmds vehicle_charging_cmds</code>,
+          得到 access token(过期用 refresh token 续期)。</div>
+      </li>
+      <li>
+        <h3>配对虚拟钥匙</h3>
+        <div class="desc">用 vehicle-command 工具生成配对链接 / 二维码,手机 Tesla App 打开确认。</div>
+      </li>
+      <li>
+        <h3>配置 .env 并重启</h3>
+        <div class="desc"><pre><code>CONTROL_API_URL=http://&lt;proxy容器名&gt;:8080
+CONTROL_API_TOKEN=&lt;上一步的 access token&gt;</code></pre>
+          <code>docker compose up -d</code> 后到「控制」页实测。</div>
+      </li>
+    </ol>
+  </section>
+
+  <section class="card">
+    <h2>使用与安全须知</h2>
+    <ul>
+      <li><b>休眠唤醒</b>:车辆休眠时首条指令会先唤醒(10–30 秒)。唤醒(wake_up)是计费里最贵的操作($0.02/次),面板不会自动轮询唤醒。</li>
+      <li><b>费用</b>:Fleet API 按量计费,控制指令 $0.001/次;每个开发者账号每月 <b>$10 免费额度</b>,个人使用基本免费。</li>
+      <li><b>权限即控制权</b>:能登录面板账号的人就能控制车辆(解锁/开箱需二次确认,但仍属敏感)。面板账号务必使用强密码。</li>
+      <li><b>故障排查</b>:控制页提示「指令后端未配置」→ 检查 .env 两项是否填好并已 <code>docker compose up -d</code>;提示 502 → 检查代理容器与令牌有效期。</li>
+    </ul>
+    <div class="warn-box">
+      ⚠️ 面板未提供「远程启动驾驶」入口——该指令可让无钥匙开走车辆,风险过高;如确有需要请自行通过代理调用。
+    </div>
+  </section>
+
+</div>
+</body>
+</html>

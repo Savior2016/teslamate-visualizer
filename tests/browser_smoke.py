@@ -66,19 +66,15 @@ def run():
             page.goto('http://teslahome.test/',wait_until='networkidle')
             assert page.locator('#car-name').inner_text() == '合成测试车辆'
             assert page.locator('#state-text').inner_text() != '数据连接失败'
-            assert float(page.locator('#reading-fl').evaluate("e=>getComputedStyle(e).fontSize.slice(0,-2)")) >= 14
+            assert page.locator('.vehicle-readings').count()==0
+            assert page.locator('#tpms-on-fl').count()==1
+            assert page.locator('#range-seg').evaluate("e=>!!(document.querySelector('#page-control').compareDocumentPosition(e)&Node.DOCUMENT_POSITION_FOLLOWING)")
             for width in [320,390,1440]:
                 page.set_viewport_size({"width":width,"height":900})
                 for tab in ['overview','charging','activity','vehicle','drives','control']:
                     page.locator('.tab[data-page="'+tab+'"]').click();page.wait_for_timeout(80)
                     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), (role,width,tab)
             page.set_viewport_size({"width":390,"height":844})
-            page.locator('.tab[data-page="activity"]').click();page.evaluate('scrollTo(0,600)')
-            page.locator('.tab[data-page="control"]').click();page.wait_for_timeout(100)
-            assert page.evaluate('scrollY') == 0
-            if role=='viewer':
-                assert page.locator('#access-note').is_visible()
-                assert page.locator('#ctl-charge-toggle').is_disabled()
             page.locator('.tab[data-page="activity"]').click()
             page.locator('#chart-efficiency').scroll_into_view_if_needed()
             page.evaluate("echarts.getInstanceByDom(document.getElementById('chart-efficiency')).dispatchAction({type:'showTip',seriesIndex:0,dataIndex:0})")
@@ -87,15 +83,9 @@ def run():
             assert page.locator('[onerror]').count()==0
             page.goto('http://teslahome.test/account.html',wait_until='networkidle')
             assert page.locator('#teslamate-link').get_attribute('href')=='http://localhost:4000'
-            assert page.locator('.acct-header h1').bounding_box()['height'] < 30
-            assert page.locator('#account-admin').is_visible() == (role=='admin')
-            assert page.locator('#backup-admin').is_visible() == (role=='admin')
-            # Auxiliary endpoint failure must not blank healthy overview data.
-            failed.add('parking/fees')
-            page.goto('http://teslahome.test/',wait_until='networkidle')
-            assert page.locator('#car-name').inner_text()=='合成测试车辆'
-            assert page.locator('#state-text').inner_text()!='数据连接失败'
-            assert '停车费' in page.locator('#load-warning').inner_text()
+            assert page.locator('#authorization-guide').count()==0
+            assert page.locator('#bk-import').is_visible()
+            assert page.locator('#nu-role').count()==0
             assert not errors, errors
             assert not writes, writes
             page.evaluate("localStorage.setItem('ttv-theme','light')")

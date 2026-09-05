@@ -91,9 +91,6 @@
     .form-msg.err { color: #d03b3b; }
     .form-msg.ok { color: var(--success); }
 
-    select { font: inherit; color: var(--text-primary); background: var(--page); padding: 8px; border: 1px solid var(--border); border-radius: 8px; }
-    summary { cursor: pointer; padding: 8px 0; font-size: 14px; }
-
     /* 账号列表 */
     .user-list { margin: 6px 0 4px; padding: 0; list-style: none; }
     .user-list li {
@@ -112,12 +109,7 @@
     .sync-stats .stat b { display: block; font-size: 16px; color: var(--text-primary); font-weight: 600; }
 
     @media (max-width: 600px) {
-      .acct-header { display: grid; grid-template-columns: 1fr auto; gap: 12px; }
-      .acct-header h1 { font-size: 20px; grid-row: 1; grid-column: 2; white-space: nowrap; }
-      .acct-back { justify-self: start; white-space: nowrap; }
-      .acct-user-chip { margin-left: 0; justify-self: start; max-width: 100%; overflow-wrap: anywhere; }
-      #logout-btn { white-space: nowrap; min-height: 40px; }
-
+      .acct-header h1 { font-size: 17px; }
       .tesla-banner { flex-wrap: wrap; }
       .tesla-banner small { margin-left: 0; width: 100%; text-align: left; }
     }
@@ -144,7 +136,6 @@
       <small id="tesla-banner-sub"></small>
     </div>
 
-    <details id="authorization-guide" open><summary>授权步骤与连接说明</summary>
     <ol class="steps" id="guide-steps">
       <li data-step="deployed">
         <h3>部署一体化服务 <span class="step-state" data-state></span></h3>
@@ -179,7 +170,7 @@
         <h3>数据同步 <span class="step-state" data-state></span></h3>
         <div class="desc">行驶、充电、哨兵等数据将持续累积;回到面板即可查看可视化报表。</div>
       </li>
-    </ol></details>
+    </ol>
 
     <div class="sync-stats" id="sync-stats" hidden>
       <span class="stat"><b id="stat-positions">—</b>轨迹点</span>
@@ -204,28 +195,31 @@
   </section>
 
   <!-- 面板账号 -->
-  <section class="card" id="account-admin" hidden>
+  <section class="card">
     <h2>面板账号</h2>
     <ul class="user-list" id="user-list"></ul>
     <div class="form-row">
       <input type="text" id="nu-name" placeholder="新账号用户名" autocomplete="off" maxlength="32">
       <input type="password" id="nu-pass" placeholder="密码(至少 12 位)" autocomplete="new-password">
-      <label>权限 <select id="nu-role"><option value="viewer">只读</option><option value="admin">管理员</option></select></label>
       <button class="btn ghost" id="nu-submit">添加账号</button>
     </div>
     <div class="form-msg" id="nu-msg"></div>
   </section>
 
-  <section class="card" id="backup-admin" hidden>
+  <!-- 数据备份 / 迁移 -->
+  <section class="card">
     <h2>数据备份 / 迁移</h2>
-    <p class="data-note">备份含完整行程、位置与面板账号，请妥善保管。导出前需再次输入当前密码。</p>
+    <p style="font-size:13px;color:var(--text-secondary);line-height:1.7;margin:4px 0 10px">
+      导出内容为<b>整个数据库</b>(行驶/充电/哨兵等全部遥测 + 手填的费用与充电桩信息)
+      以及面板账号,打包为一个 .tar.gz 文件。换新服务器时:先正常部署并启动服务,
+      再在此处导入备份包即可整体迁移(导入会<b>覆盖</b>当前数据库)。
+    </p>
     <div class="form-row">
-      <input type="password" id="bk-password" placeholder="当前密码" aria-label="确认导出密码" autocomplete="current-password">
-      <button class="btn" id="bk-export">导出备份</button>
+      <button class="btn" id="bk-export">⬇ 导出备份</button>
+      <input type="file" id="bk-file" accept=".gz,.tgz" style="flex:1 1 200px">
+      <button class="btn ghost" id="bk-import">⬆ 导入并覆盖恢复</button>
     </div>
-    <div class="form-msg" id="bk-msg" role="status"></div>
-    <p class="data-note">恢复需要在服务器维护期间执行。换新服务器时须安全保留原 TeslaMate 加密密钥，或重新授权 Tesla；普通备份不包含该密钥。</p>
-    <a href="https://github.com/Savior2016/teslamate-visualizer/blob/main/docs/MAINTENANCE.md" target="_blank" rel="noopener">备份与恢复说明</a>
+    <div class="form-msg" id="bk-msg"></div>
   </section>
 
 </div>

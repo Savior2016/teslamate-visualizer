@@ -2057,28 +2057,3 @@ footer a { color: var(--text-muted); }
 
   footer { font-size: 11px; }
 }
-
-/* Readable telemetry and explicit freshness, independent of SVG scaling. */
-.data-note { font-size: 13px; line-height: 1.6; color: var(--text-secondary); margin: 10px 0; }
-.data-note.stale { color: #c28b26; }
-.filter-row { margin: 16px 0 8px; }
-.vehicle-readings { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 16px; }
-.vehicle-readings > div { padding: 12px; border: 1px solid var(--border); border-radius: 10px; min-width: 0; }
-.vehicle-readings span { display: block; font-size: 12px; color: var(--text-secondary); }
-.vehicle-readings b { display: block; font-size: 16px; margin-top: 5px; overflow-wrap: anywhere; }
-.read-only input:disabled, .read-only button:disabled { cursor: not-allowed; opacity: 0.6; }
-.footer-text summary { cursor: pointer; }
-@media (max-width: 600px) {
-  .carview { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
-  .car-mid { grid-column: 1 / -1; grid-row: 1; width: 100%; min-width: 0; }
-  .car-stage { height: 290px; aspect-ratio: auto; }
-  .car-legend { display: flex; flex-basis: auto; min-width: 0; }
-  .car-legend .cl-val { font-size: 16px; }
-  .car-legend .cl-sub { font-size: 12px; overflow-wrap: anywhere; }
-  .car-tpms-tire, #car-center-temp, #car-temp-val { visibility: hidden; }
-  .vehicle-readings { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .tabbar .tab { font-size: 12px; }
-}
-
-[hidden] { display: none !important; }
-@media (max-width: 600px) { #car-zoom { transform: none; } }
