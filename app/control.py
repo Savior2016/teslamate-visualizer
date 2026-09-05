@@ -72,6 +72,15 @@ _strobe_stop = threading.Event()
 _strobe_stop.set()
 _strobe_until = 0.0
 
+# 自动唤醒:车辆休眠/离线时云端指令必失败。下发前查 TeslaMate states,非 online
+# 先 wake_up 并等待上线(最长 45 秒);唤醒成功后 120 秒内跳过后续前置检查,
+# 避免 TeslaMate 状态上报延迟导致每条指令都重复等待。状态刷新(refresh)不唤醒。
+WAKE_TIMEOUT = 45.0
+WAKE_POLL = 2.5
+WAKE_CACHE = 120.0
+_wake_lock = threading.Lock()
+_awake_until = 0.0
+
 # 车辆状态:TeslaMate 只上报空调 / 充电 / 充电线;车锁、哨兵、车窗、充电口盖
 # TeslaMate 不上报(Tesla 也不推送),由面板按「最近一次成功指令」乐观推测,
 # 持久化到 panel_manual(kind='control_state', key='current'),重启不丢。
@@ -297,6 +306,81 @@ def _forward(cmd: str, args: dict, vin: str | None = None) -> dict:
     return {"ok": bool(result.get("result")), "reason": str(result.get("reason") or "")[:200]}
 
 
+def _teslamate_online(vin: str) -> bool | None:
+    """TeslaMate states 表的最新车辆状态;True=在线。查询失败/无记录返回 None(不阻塞下发)。"""
+    try:
+        rows = _m().q(
+            "SELECT state FROM states WHERE car_id = (SELECT id FROM cars WHERE vin = %s) "
+            "ORDER BY start_date DESC LIMIT 1",
+            (vin,),
+        )
+    except Exception:  # noqa: BLE001 — 状态预检失败不影响指令主流程
+        return None
+    if not rows:
+        return None
+    return str(rows[0]["state"]) == "online"
+
+
+def _wake_and_wait(vin: str) -> None:
+    """循环 wake_up 直到车辆上线或超时(车辆真正离线时唤醒无果,返回 504)。"""
+    global _awake_until
+    deadline = time.monotonic() + WAKE_TIMEOUT
+    while True:
+        try:
+            if _forward("wake_up", {}, vin).get("ok"):
+                _awake_until = time.monotonic() + WAKE_CACHE
+                return
+        except HTTPException:
+            pass  # 唤醒请求本身失败(代理 408/往返超时)时继续重试到截止时间
+        if time.monotonic() >= deadline:
+            raise HTTPException(status_code=504, detail="车辆唤醒超时：车辆可能离线或处于信号弱的区域，请稍后再试或在 Tesla App 中唤醒")
+        if _teslamate_online(vin):
+            _awake_until = time.monotonic() + WAKE_CACHE
+            return
+        time.sleep(WAKE_POLL)
+
+
+def _ensure_awake(vin: str) -> bool:
+    """下发前确保车辆在线:TeslaMate 报告休眠/离线时先唤醒并等待上线。返回是否发生了唤醒。"""
+    if _teslamate_online(vin) or time.monotonic() < _awake_until:
+        return False
+    with _wake_lock:
+        if _teslamate_online(vin) or time.monotonic() < _awake_until:
+            return False
+        _wake_and_wait(vin)
+        return True
+
+
+# 上游「车辆休眠/离线」类失败的固定词表(英文为 Tesla 原始 reason,中文为本面板 scrub 后的提示)
+_ASLEEP_MARKERS = ("offline or asleep", "vehicle not connected", "vehicle is asleep",
+                   "车辆当前离线或休眠", "车辆未连接", "车辆未在线")
+
+
+def _is_asleep_failure(text) -> bool:
+    text = str(text or "").lower()
+    return any(marker in text for marker in _ASLEEP_MARKERS)
+
+
+def _forward_with_wake(cmd: str, args: dict, vin: str) -> dict:
+    """转发指令;预检与执行之间车辆恰好入睡(上游明确拒绝)时,无视 TeslaMate 状态直接唤醒后重发一次。"""
+    global _awake_until
+    try:
+        result = _forward(cmd, args, vin)
+    except HTTPException as exc:
+        if not _is_asleep_failure(exc.detail):
+            raise
+        with _wake_lock:
+            _awake_until = 0.0
+            _wake_and_wait(vin)
+        return _forward(cmd, args, vin)
+    if not result.get("ok") and _is_asleep_failure(result.get("reason")):
+        with _wake_lock:
+            _awake_until = 0.0
+            _wake_and_wait(vin)
+        result = _forward(cmd, args, vin)
+    return result
+
+
 def _strobe_loop() -> None:
     """爆闪线程:等上一条返回再发下一条,保证最小间隔;出错不中断(车辆暂时不可达时继续尝试)。"""
     while not _strobe_stop.is_set() and time.time() < _strobe_until:
@@ -376,12 +460,17 @@ def send_command(body: CommandIn, request: Request):
     log.append(now)
 
     if body.cmd == "flash_strobe":
+        _ensure_awake(_vin())
         return _strobe_start(body.args or {})
     if body.cmd == "flash_strobe_stop":
         return _strobe_cancel()
 
     args = _validate_args(body.cmd, body.args or {})
-    result = {"cmd": body.cmd, **_forward(body.cmd, args)}
+    vin = _vin()
+    woke = body.cmd != "wake_up" and _ensure_awake(vin)
+    result = {"cmd": body.cmd, **_forward_with_wake(body.cmd, args, vin)}
+    if woke:
+        result["woke"] = True
     patch = _state_patch(body.cmd, args)
     if result.get("ok") and patch:
         try:

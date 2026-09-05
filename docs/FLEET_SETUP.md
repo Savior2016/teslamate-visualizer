@@ -22,7 +22,7 @@ docker compose --profile control up -d --no-deps tesla-proxy visualizer
 
 - 提示公钥未配对：在 Tesla App 添加当前应用的虚拟钥匙，确认代理私钥对应已注册、已配对的公钥。
 - 提示车辆未连接或正在唤醒：先在 Tesla App 确认车辆在线。
-- 提示车辆离线或休眠（`vehicle unavailable: vehicle is offline or asleep`）：先在 Tesla App 唤醒，待车辆在线再手动操作。面板不会自动唤醒或重发原指令；云端车辆列表查询成功不代表车辆在线。
+- 提示车辆离线或休眠（`vehicle unavailable: vehicle is offline or asleep`）：面板在 TeslaMate 报告车辆休眠/离线时会先自动唤醒（最长约 45 秒）再下发原指令，唤醒成功后短时间内不再重复预检；此提示说明自动唤醒未成功，请在 Tesla App 确认车辆在线后再操作。云端车辆列表查询成功不代表车辆在线。
 - 提示通信超时：指令可能已执行，先核实车辆状态再决定是否重试。
 - 未识别的 500：在部署目录读取失败时间附近的代理日志：
 

@@ -34,10 +34,21 @@ with sync_playwright() as pw:
             page.goto('http://teslahome.test/#control',wait_until='networkidle')
             assert page.locator('#page-control').is_visible()
             assert page.locator('#ctl-model-temp').text_content()=='22.0°C'
-            assert '前备箱·开' in page.locator('[data-zone="frunk"]').text_content()
+            # 状态为视觉效果:开启部位带 .on 发光,标签只保留静态名称
+            assert 'on' in (page.locator('[data-zone="frunk"]').get_attribute('class') or '').split()
+            assert page.locator('[data-zone="frunk"] .zone-lab').text_content()=='前备箱'
+            assert 'on' in (page.locator('[data-zone="lock"]').get_attribute('class') or '').split()
             assert page.locator('.ctl-module').count()==4
+            assert page.locator('.ctl-switch[data-switch]').count()==4
             assert not page.locator('#ctl-setup').is_visible()
             page.on('dialog',lambda d:d.accept())
+            # 模块小窗滑块:点击直接发开/关指令(空调当前开 → 发关闭)
+            if role=='admin':
+                assert 'on' in (page.locator('[data-panel="climate"]').get_attribute('class') or '').split()
+                page.locator('.ctl-switch[data-switch="climate"]').click()
+                page.wait_for_function("document.querySelector('#ctl-operation-message').textContent.includes('指令已接受')")
+            else:
+                assert page.locator('.ctl-switch[data-switch="climate"]').is_disabled()
             for name in ['climate','charge','lights','nap']:
                 page.locator('[data-panel="'+name+'"]').click()
                 assert page.locator('#ctl-dialog').is_visible()
@@ -47,18 +58,22 @@ with sync_playwright() as pw:
                         page.locator('#ctl-temp-input').fill('23.5')
                         page.get_by_role('button',name='设置温度',exact=True).click()
                         page.wait_for_function("document.querySelector('#ctl-dialog-message').textContent.includes('指令已接受')")
-                    else:assert page.get_by_role('button',name='设置温度',exact=True).is_disabled()
+                    else:
+                        assert page.get_by_role('button',name='设置温度',exact=True).is_disabled()
+                        assert page.locator('#ctl-dialog-body .ctl-switch').first.is_disabled()
                 if name=='nap' and role=='admin':
-                    page.locator('#ctl-nap-start').click()
+                    nap_switch=page.locator('#ctl-dialog-body .ctl-switch')
+                    nap_switch.click()
                     page.wait_for_function("document.querySelector('#ctl-nap-status').textContent.includes('剩余')")
-                    page.locator('#ctl-nap-stop').click()
+                    nap_switch.click()
                     page.wait_for_function("document.querySelector('#ctl-nap-status').textContent==='已结束'")
                 page.keyboard.press('Escape')
                 assert not page.locator('#ctl-dialog').is_visible()
             assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
             if role=='admin':
                 assert ('control/command',{'cmd':'set_temps','args':{'driver_temp':23.5}}) in commands
-                assert len(commands)==3
+                assert ('control/command',{'cmd':'auto_conditioning_stop','args':{}}) in commands
+                assert len(commands)==4
             else:assert not commands
             # No configuration: show one tidy link; a partially configured user returns via account settings.
             state.update(configured=False,ever_configured=False)

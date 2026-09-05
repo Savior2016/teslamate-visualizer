@@ -135,7 +135,7 @@ def _remote_error_detail(exc, url):
     command = path.startswith("/api/1/vehicles/") and ("/command/" in path or path.endswith("/wake_up"))
     stage = "车辆指令服务" if command else "Tesla 授权服务" if path.endswith("/token") else "Tesla 服务"
     hints = {400: "检查请求参数、区域和应用权限", 401: "凭据无效或授权已过期，请重新授权",
-             403: "检查应用权限及车辆区域", 408: "车辆未在线，请在 Tesla App 唤醒后再操作",
+             403: "检查应用权限及车辆区域", 408: "车辆未在线；面板已自动尝试唤醒，请在 Tesla App 确认车辆在线后重试",
              409: "请求状态冲突；注册时请检查域名与公钥是否一致", 429: "请求过多，请稍后重试"}
     hint = hints.get(exc.code, "请稍后重试")
     if command and exc.code >= 500:
@@ -148,7 +148,7 @@ def _remote_error_detail(exc, url):
             values = [payload.get("error"), payload.get("error_description"),
                       response.get("reason") if isinstance(response, dict) else None]
             known = (
-                ("vehicle is offline or asleep", "车辆当前离线或休眠，请先在 Tesla App 唤醒车辆，确认在线后再操作；面板不会自动唤醒或重发指令"),
+                ("vehicle is offline or asleep", "车辆当前离线或休眠，面板自动唤醒未成功，请在 Tesla App 确认车辆在线后再操作"),
                 ("your public key has not been paired with the vehicle", "车辆未配对当前应用公钥，请在 Tesla App 添加此应用虚拟钥匙，并确认代理使用对应私钥"),
                 ("vehicle not connected", "车辆未连接，请在 Tesla App 确认车辆在线后再操作"),
                 ("vehicle busy or finishing wake-up", "车辆忙碌或正在唤醒，请待车辆在线后再操作"),

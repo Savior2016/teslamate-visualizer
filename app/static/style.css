@@ -1722,9 +1722,10 @@ footer a { color: var(--text-muted); }
   filter: drop-shadow(0 0 6px color-mix(in srgb, var(--zc, var(--series-1)) 55%, transparent));
 }
 .ctl-zone.on .zone-shape {
-  fill: color-mix(in srgb, var(--zc, var(--series-1)) 32%, transparent);
+  fill: color-mix(in srgb, var(--zc, var(--series-1)) 38%, transparent);
   stroke: var(--zc, var(--series-1));
   stroke-width: 1.2;
+  filter: drop-shadow(0 0 7px color-mix(in srgb, var(--zc, var(--series-1)) 55%, transparent));
 }
 .ctl-zone.busy .zone-shape { animation: ctlzone-pulse 1s ease-in-out infinite; }
 @keyframes ctlzone-pulse { 50% { fill: color-mix(in srgb, var(--zc, var(--series-1)) 28%, transparent); } }

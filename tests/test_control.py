@@ -109,3 +109,59 @@ def test_nap_duration_validation(client,monkeypatch,timer):
     for value in [0,181,2.5,True,'30']:
         assert client.post('/api/control/nap/start',json={'minutes':value}).status_code==422
     assert not timer[2]
+
+
+def command_harness(monkeypatch, online, forward):
+    """Stub the command backend: returns the recorded call list."""
+    calls=[]
+    monkeypatch.setattr(control,'CONTROL_API_URL','http://backend.test')
+    monkeypatch.setattr(control,'CONTROL_API_TOKEN','test-token')
+    monkeypatch.setattr(control,'_vin',lambda:'vin-test')
+    monkeypatch.setattr(control,'_awake_until',0.0)
+    monkeypatch.setattr(control,'_teslamate_online',lambda vin:online(vin) if callable(online) else online)
+    monkeypatch.setattr(control,'_save_optimistic',lambda patch:None)
+    def spy(cmd,args,vin=None):
+        calls.append(cmd)
+        return forward(cmd,calls)
+    monkeypatch.setattr(control,'_forward',spy)
+    return calls
+
+
+def test_command_wakes_sleeping_vehicle_first(client,monkeypatch):
+    calls=command_harness(monkeypatch,False,lambda cmd,calls:{'ok':True,'reason':''})
+    login(client)
+    response=client.post('/api/control/command',json={'cmd':'door_lock','args':{}})
+    assert response.status_code==200
+    assert calls==['wake_up','door_lock']
+    assert response.json()['woke'] is True
+
+
+def test_command_skips_wake_when_online(client,monkeypatch):
+    calls=command_harness(monkeypatch,True,lambda cmd,calls:{'ok':True,'reason':''})
+    login(client)
+    response=client.post('/api/control/command',json={'cmd':'door_lock','args':{}})
+    assert response.status_code==200
+    assert calls==['door_lock'] and 'woke' not in response.json()
+
+
+def test_command_retries_after_mid_command_nap(client,monkeypatch):
+    # TeslaMate 状态为 online(预检通过),但执行时车辆恰好入睡:直接唤醒后重发一次
+    def forward(cmd,calls):
+        if cmd=='door_lock' and calls.count('door_lock')==1:
+            return {'ok':False,'reason':'vehicle unavailable: vehicle is offline or asleep'}
+        return {'ok':True,'reason':''}
+    calls=command_harness(monkeypatch,True,forward)
+    login(client)
+    response=client.post('/api/control/command',json={'cmd':'door_lock','args':{}})
+    assert response.status_code==200 and response.json()['ok'] is True
+    assert calls==['door_lock','wake_up','door_lock']
+
+
+def test_wake_timeout_returns_504(client,monkeypatch):
+    monkeypatch.setattr(control,'WAKE_TIMEOUT',0.05)
+    monkeypatch.setattr(control,'WAKE_POLL',0.01)
+    command_harness(monkeypatch,False,lambda cmd,calls:{'ok':False,'reason':''})
+    login(client)
+    response=client.post('/api/control/command',json={'cmd':'door_lock','args':{}})
+    assert response.status_code==504
+    assert '唤醒超时' in response.json()['detail']

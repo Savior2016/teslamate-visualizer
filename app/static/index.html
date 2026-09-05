@@ -7,7 +7,7 @@
   <title>TESLA Home</title>
   <link rel="stylesheet" href="/leaflet.css">
   <link rel="stylesheet" href="/style.css">
-  <link rel="stylesheet" href="/control.css?v=1">
+  <link rel="stylesheet" href="/control.css?v=2">
 </head>
 <body>
 <div class="wrap">
@@ -407,8 +407,8 @@
 
               <!-- 部位按钮:边界与钣金缝线/玻璃边/车身边共享同一条曲线,缝隙处处一致 -->
               <!-- 前备箱(引擎盖,上=车头顶边,下=机盖缝线) -->
-              <g class="ctl-zone" data-zone="frunk" role="button" tabindex="0">
-                <title>前备箱(确认后开启)</title>
+              <g class="ctl-zone" data-zone="frunk" role="button" tabindex="0" style="--zc:var(--series-2)">
+                <title>前备箱(确认后开启);橙色发光 = 当前处于开启状态</title>
                 <path class="zone-shape" d="M108 84 C122 62 144 52 170 52 C196 52 218 62 232 84 C232 89 231 93 230 97 C200 88 140 88 110 97 C109 93 108 89 108 84 Z"/>
                 <path class="zone-ico" transform="translate(161 57) scale(0.75)" d="M4 7l2-3h12l2 3v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7zm2.6-1-1 1h12.8l-1-1H6.6zM9 12h6v2H9v-2z"/>
                 <text class="zone-lab" x="170" y="82">前备箱</text>
@@ -463,8 +463,8 @@
                 <text class="zone-lab zone-lab-v" transform="rotate(90 89 314)" x="89" y="314">充电口</text>
               </g>
               <!-- 后备箱(车尾,上=玻璃底边,下=车身尾边) -->
-              <g class="ctl-zone" data-zone="trunk" role="button" tabindex="0">
-                <title>后备箱(确认后开启)</title>
+              <g class="ctl-zone" data-zone="trunk" role="button" tabindex="0" style="--zc:var(--series-2)">
+                <title>后备箱(确认后开启);橙色发光 = 当前处于开启状态</title>
                 <path class="zone-shape" d="M100 342 C102 370 132 384 170 384 C208 384 238 370 240 342 L260.3 342 C260 356 255 378 245 392 C233 408 205 418 170 418 C135 418 107 408 95 392 C85 378 80 356 79.6 342 Z"/>
                 <path class="zone-ico" transform="translate(163 388.8) scale(0.6)" d="M4 7l2-3h12l2 3v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7zm2.6-1-1 1h12.8l-1-1H6.6zM9 12h6v2H9v-2z"/>
                 <text class="zone-lab" x="170" y="413">后备箱</text>
@@ -477,14 +477,26 @@
               <path class="car-body-line" d="M170 52 C196 52 218 62 232 84 C243 100 251 118 256 142 C261 168 263 190 261 210 C260 228 259 244 259 258 C259 288 261 316 261 334 C260 356 255 378 245 392 C233 408 205 418 170 418 C135 418 107 408 95 392 C85 378 80 356 79 334 C79 316 81 288 81 258 C81 244 80 228 79 210 C77 190 79 168 84 142 C89 118 97 100 108 84 C122 62 144 52 170 52 Z" pointer-events="none"/>
             </svg>
             <div class="ctl-chips" id="ctl-chips"></div>
-            <p class="ctl-legend-hint">车头盖 = 前备箱 · 前风挡 = 哨兵 · 左右灯角 = 闪灯/鸣笛 · 左门 = 车锁 · 右窗 = 车窗 · 玻璃顶 = 空调 · 左后翼子板 = 充电口 · 车尾 = 后备箱</p>
+            <p class="ctl-legend-hint">车头盖 = 前备箱 · 前风挡 = 哨兵 · 左右灯角 = 闪灯/鸣笛 · 左门 = 车锁 · 右窗 = 车窗 · 玻璃顶 = 空调 · 左后翼子板 = 充电口 · 车尾 = 后备箱 · 部位按其颜色发光 = 开启/已锁,半暗 = 状态未知</p>
           </div>
 
           <div class="ctl-modules" aria-label="车辆控制模块">
-            <button class="ctl-module" data-panel="climate"><span>空调温度</span><b id="ctl-module-climate">查看与调节</b></button>
-            <button class="ctl-module" data-panel="charge"><span>充电控制</span><b id="ctl-module-charge">启停与上限</b></button>
-            <button class="ctl-module" data-panel="lights"><span>车灯与鸣笛</span><b id="ctl-module-lights">闪灯 / 连续闪灯</b></button>
-            <button class="ctl-module" data-panel="nap"><span>午休模式</span><b id="ctl-module-nap">定时露营</b></button>
+            <div class="ctl-module" data-panel="climate" role="button" tabindex="0" style="--mc:var(--series-1)">
+              <span>空调温度</span><b id="ctl-module-climate">查看与调节</b>
+              <button class="ctl-switch" data-switch="climate" type="button" role="switch" aria-checked="false" aria-label="空调开关"><i></i></button>
+            </div>
+            <div class="ctl-module" data-panel="charge" role="button" tabindex="0" style="--mc:var(--cat-charge)">
+              <span>充电控制</span><b id="ctl-module-charge">启停与上限</b>
+              <button class="ctl-switch" data-switch="charge" type="button" role="switch" aria-checked="false" aria-label="充电开关"><i></i></button>
+            </div>
+            <div class="ctl-module" data-panel="lights" role="button" tabindex="0" style="--mc:var(--series-4)">
+              <span>车灯与鸣笛</span><b id="ctl-module-lights">闪灯 / 连续闪灯</b>
+              <button class="ctl-switch" data-switch="lights" type="button" role="switch" aria-checked="false" aria-label="连续闪灯开关"><i></i></button>
+            </div>
+            <div class="ctl-module" data-panel="nap" role="button" tabindex="0" style="--mc:var(--cat-idle)">
+              <span>午休模式</span><b id="ctl-module-nap">定时露营</b>
+              <button class="ctl-switch" data-switch="nap" type="button" role="switch" aria-checked="false" aria-label="午休模式开关"><i></i></button>
+            </div>
           </div>
         </div>
         <p class="ctl-note" id="ctl-live-note" role="status">点击刷新读取车辆当前状态；未上报的项目显示未知。</p>
@@ -572,7 +584,7 @@
 
 <script src="/echarts.min.js"></script>
 <script src="/leaflet.js"></script>
-<script src="/control.js?v=1"></script>
+<script src="/control.js?v=2"></script>
 <script src="/app.js"></script>
 </body>
 </html>
