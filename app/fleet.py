@@ -148,6 +148,7 @@ def _remote_error_detail(exc, url):
             values = [payload.get("error"), payload.get("error_description"),
                       response.get("reason") if isinstance(response, dict) else None]
             known = (
+                ("vehicle is offline or asleep", "车辆当前离线或休眠，请先在 Tesla App 唤醒车辆，确认在线后再操作；面板不会自动唤醒或重发指令"),
                 ("your public key has not been paired with the vehicle", "车辆未配对当前应用公钥，请在 Tesla App 添加此应用虚拟钥匙，并确认代理使用对应私钥"),
                 ("vehicle not connected", "车辆未连接，请在 Tesla App 确认车辆在线后再操作"),
                 ("vehicle busy or finishing wake-up", "车辆忙碌或正在唤醒，请待车辆在线后再操作"),

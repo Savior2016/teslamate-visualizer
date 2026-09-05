@@ -108,6 +108,9 @@ def test_http_rejected(client,monkeypatch):
 
 
 @pytest.mark.parametrize("payload, expected", [
+    ({"error": "vehicle unavailable: vehicle is offline or asleep"}, "车辆当前离线或休眠"),
+    ({"error_description": "vehicle unavailable: vehicle is offline or asleep"}, "车辆当前离线或休眠"),
+    ({"response": {"reason": "vehicle unavailable: vehicle is offline or asleep SECRET_TOKEN"}}, "车辆当前离线或休眠"),
     ({"error": "vehicle rejected request: your public key has not been paired with the vehicle"}, "未配对当前应用公钥"),
     ({"error": "vehicle not connected"}, "车辆未连接"),
     ({"error": "vehicle busy or finishing wake-up"}, "车辆忙碌"),
