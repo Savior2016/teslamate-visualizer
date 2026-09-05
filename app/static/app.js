@@ -2747,3 +2747,5 @@
 
   document.addEventListener('DOMContentLoaded', init);
 })();
+
+window.addEventListener("load", () => { if (location.hash === "#control") document.querySelector('.tab[data-page="control"]')?.click(); });

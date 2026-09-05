@@ -286,6 +286,17 @@ _AUTH_EXACT = {"/api/health", "/api/login", "/api/logout", "/login", "/login.js"
 _AUTH_PREFIX = ("/fonts/",)
 
 
+from fastapi.exceptions import RequestValidationError
+from fastapi.exception_handlers import request_validation_exception_handler
+
+
+@app.exception_handler(RequestValidationError)
+async def safe_validation_error(request, exc):
+    if request.url.path.startswith("/api/fleet/"):
+        return JSONResponse({"detail": "请检查地区、客户端 ID 和密钥的格式及长度"}, status_code=422)
+    return await request_validation_exception_handler(request, exc)
+
+
 @app.exception_handler(AuthConfigurationError)
 async def auth_config_error(request, exc):
     return JSONResponse({"detail": "账号配置不可用，请联系管理员"}, status_code=503)
@@ -1619,6 +1630,8 @@ from .control import router as control_router
 from .parking import router as parking_router
 from .vehicle import router as vehicle_router
 app.include_router(backup_router)   # 须在 app.mount("/") 之前注册
+from .fleet import router as fleet_router
+app.include_router(fleet_router)
 app.include_router(control_router)
 app.include_router(parking_router)
 app.include_router(vehicle_router)

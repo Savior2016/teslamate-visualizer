@@ -22,4 +22,4 @@ RUN groupadd --gid 1000 panel && useradd --uid 1000 --gid panel --no-create-home
 USER 1000:1000
 ENV DISPLAY_TZ=Asia/Shanghai
 EXPOSE 8080
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080", "--no-proxy-headers"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080", "--no-proxy-headers", "--no-access-log"]

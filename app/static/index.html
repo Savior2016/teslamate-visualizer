@@ -385,7 +385,7 @@
           <h2>车辆控制</h2>
           <div class="card-sub">车锁、哨兵与车窗显示最后一次指令记录，不代表当前状态；实时状态请以车辆或 Tesla App 为准。</div>
         </div>
-        <div class="mini-stats" id="ctl-backend"></div>
+        <div><div class="mini-stats" id="ctl-backend"></div><a href="/fleet.html" class="ctl-setup-link">接入设置</a></div>
       </div>
 
       <!-- 车辆当前状态条(数据来自 TeslaMate 上报) -->
@@ -396,9 +396,9 @@
         <span class="ctl-setup-icon">🔑</span>
         <div class="ctl-setup-text">
           <b>控制功能尚未接入</b>,以下为控制面板预览,按钮暂不可用。<br>
-          完成注册与虚拟钥匙配对、在 .env 填入后端地址与令牌后重启即可启用。
+          已有客户端 ID 和密钥？按步骤填写、授权并配对虚拟钥匙即可接入。
         </div>
-        <a class="ctl-setup-link" href="/guide.html">查看帮助</a>
+        <a class="ctl-setup-link" href="/fleet.html">开始接入</a>
       </div>
 
       <div id="ctl-main" hidden>

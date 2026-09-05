@@ -202,7 +202,11 @@ def _validate_args(cmd: str, args: dict) -> dict:
 
 def _forward(cmd: str, args: dict) -> dict:
     """向指令后端转发一条指令,返回 {ok, reason}。"""
-    url = f"{CONTROL_API_URL}/api/1/vehicles/{_vin()}/command/{cmd}"
+    from . import fleet
+    if fleet.configured():
+        return fleet.forward(_vin(), cmd, args)
+    suffix = "wake_up" if cmd == "wake_up" else "command/" + cmd
+    url = f"{CONTROL_API_URL}/api/1/vehicles/{_vin()}/{suffix}"
     req = urllib.request.Request(
         url,
         data=json.dumps(args).encode("utf-8"),
@@ -267,9 +271,11 @@ def _strobe_cancel() -> dict:
 def control_status():
     """控制功能是否已配置指令后端(不泄露令牌,只回域名与 VIN 后 6 位)+ 车辆状态。"""
     base = {"configured": False, "strobe_active": _strobe_active(), "states": _states()}
-    if not (CONTROL_API_URL and CONTROL_API_TOKEN):
+    from . import fleet
+    if not (fleet.configured() or (CONTROL_API_URL and CONTROL_API_TOKEN)):
         return base
-    host = CONTROL_API_URL.split("://", 1)[-1].split("/", 1)[0]
+    backend_url = fleet.PROXY_URL if fleet.configured() else CONTROL_API_URL
+    host = backend_url.split("://", 1)[-1].split("/", 1)[0]
     vin_tail = None
     try:
         vin_tail = _vin()[-6:]
@@ -282,7 +288,8 @@ def control_status():
 def send_command(body: CommandIn, request: Request):
     """下发车辆指令:白名单校验 → 节流 → 转发指令后端,返回 Tesla 侧执行结果。"""
     _m().require_admin(request)
-    if not (CONTROL_API_URL and CONTROL_API_TOKEN):
+    from . import fleet
+    if not (fleet.configured() or (CONTROL_API_URL and CONTROL_API_TOKEN)):
         raise HTTPException(status_code=503, detail="控制功能未配置,请先在 .env 设置 CONTROL_API_URL / CONTROL_API_TOKEN")
     # 爆闪为本地面板功能(循环 flash_lights),不直接转发;计 1 次节流
     if body.cmd in ("flash_strobe", "flash_strobe_stop"):

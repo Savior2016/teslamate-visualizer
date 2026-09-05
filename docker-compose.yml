@@ -103,12 +103,27 @@ services:
       - CONTROL_API_URL=${CONTROL_API_URL:-}
       - CONTROL_API_TOKEN=${CONTROL_API_TOKEN:-}
       - CONTROL_VIN=${CONTROL_VIN:-}
+      - FLEET_PUBLIC_ORIGIN=${FLEET_PUBLIC_ORIGIN:-}
+      - FLEET_PROXY_URL=https://tesla-proxy:4443
     ports:
       # 面板主入口(自带登录认证)。配合 Caddy HTTPS 时可改 VISUALIZER_BIND=127.0.0.1
       - "${VISUALIZER_BIND:-127.0.0.1}:8080:8080"
     volumes:
       # 面板用户数据:账号(users.json)、充电费用、充电桩信息、瓦片缓存
       - ./data:/data
+
+  # Self-hosted signed commands. No host ports; keys prepared before enabling profile.
+  tesla-proxy:
+    image: ${TESLA_PROXY_IMAGE:-tesla/vehicle-command:0.4.1}
+    profiles: ["control"]
+    restart: unless-stopped
+    user: "1000:1000"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - ./data/tesla-proxy:/config:ro
+    command: ["-tls-key", "/config/tls-key.pem", "-cert", "/config/tls-cert.pem", "-key-file", "/config/fleet-key.pem", "-host", "0.0.0.0", "-port", "4443"]
 
   # 可选:TeslaMate 官方 Grafana 仪表盘,启用:docker compose --profile grafana up -d
   grafana:
