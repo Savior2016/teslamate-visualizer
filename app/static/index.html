@@ -7,7 +7,7 @@
   <title>TESLA Home</title>
   <link rel="stylesheet" href="/leaflet.css">
   <link rel="stylesheet" href="/style.css">
-  <link rel="stylesheet" href="/control.css?v=2">
+  <link rel="stylesheet" href="/control.css?v=3">
 </head>
 <body>
 <div class="wrap">
@@ -97,6 +97,13 @@
                 <clipPath id="car-ws-clip">
                   <path d="M170 104 C128 104 102 120 97 146 L243 146 C238 120 212 104 170 104 Z"/>
                 </clipPath>
+                <!-- 充电扫光裁剪:跟随电量填充矩形的实时宽度 -->
+                <clipPath id="car-fill-clip"><use href="#carfill-batt"/></clipPath>
+                <linearGradient id="car-charge-grad" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0" stop-color="#fff" stop-opacity="0"/>
+                  <stop offset="0.5" stop-color="#fff" stop-opacity="0.6"/>
+                  <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+                </linearGradient>
                 <!-- 全景玻璃顶 -->
                 <clipPath id="car-glass-clip">
                   <path d="M170 162 C210 162 238 168 242 190 C244 230 244 300 240 342 C238 370 208 384 170 384 C132 384 102 370 100 342 C96 300 96 230 98 190 C102 168 130 162 170 162 Z"/>
@@ -134,9 +141,12 @@
               <path class="car-glazing" d="M170 396 C198 396 214 401 219 408 C210 414 192 417 170 417 C148 417 130 414 121 408 C126 401 142 396 170 396 Z"/>
               <!-- 前风挡底色 -->
               <path class="car-glazing" d="M170 104 C128 104 102 120 97 146 L243 146 C238 120 212 104 170 104 Z"/>
-              <!-- 前风挡:当前电量横向填充(左→右) -->
+              <!-- 前风挡:当前电量横向填充(左→右);充电时填充变绿并循环扫光 -->
               <g clip-path="url(#car-ws-clip)">
                 <rect id="carfill-batt" class="car-ws-fill" x="97" y="104" width="0" height="42"/>
+                <g clip-path="url(#car-fill-clip)">
+                  <rect class="car-charge-shine" x="55" y="98" width="42" height="54"/>
+                </g>
               </g>
               <!-- 玻璃顶底色(深色,中央显示剩余读数) -->
               <path class="car-glass-base" d="M170 162 C210 162 238 168 242 190 C244 230 244 300 240 342 C238 370 208 384 170 384 C132 384 102 370 100 342 C96 300 96 230 98 190 C102 168 130 162 170 162 Z"/>
@@ -477,25 +487,25 @@
               <path class="car-body-line" d="M170 52 C196 52 218 62 232 84 C243 100 251 118 256 142 C261 168 263 190 261 210 C260 228 259 244 259 258 C259 288 261 316 261 334 C260 356 255 378 245 392 C233 408 205 418 170 418 C135 418 107 408 95 392 C85 378 80 356 79 334 C79 316 81 288 81 258 C81 244 80 228 79 210 C77 190 79 168 84 142 C89 118 97 100 108 84 C122 62 144 52 170 52 Z" pointer-events="none"/>
             </svg>
             <div class="ctl-chips" id="ctl-chips"></div>
-            <p class="ctl-legend-hint">车头盖 = 前备箱 · 前风挡 = 哨兵 · 左右灯角 = 闪灯/鸣笛 · 左门 = 车锁 · 右窗 = 车窗 · 玻璃顶 = 空调 · 左后翼子板 = 充电口 · 车尾 = 后备箱 · 部位按其颜色发光 = 开启/已锁,半暗 = 状态未知</p>
+            <p class="ctl-legend-hint">车头盖 = 前备箱 · 前风挡 = 哨兵 · 左右灯角 = 闪灯/鸣笛 · 左门 = 车锁 · 右窗 = 车窗 · 玻璃顶 = 空调 · 左后翼子板 = 充电口 · 车尾 = 后备箱 · 部位发绿光 = 开启/已锁,半暗 = 状态未知</p>
           </div>
 
           <div class="ctl-modules" aria-label="车辆控制模块">
             <div class="ctl-module" data-panel="climate" role="button" tabindex="0" style="--mc:var(--series-1)">
               <span>空调温度</span><b id="ctl-module-climate">查看与调节</b>
-              <button class="ctl-switch" data-switch="climate" type="button" role="switch" aria-checked="false" aria-label="空调开关"><i></i></button>
+              <button class="ctl-switch ic-climate" data-switch="climate" type="button" role="switch" aria-checked="false" aria-label="空调开关"><i></i></button>
             </div>
             <div class="ctl-module" data-panel="charge" role="button" tabindex="0" style="--mc:var(--cat-charge)">
               <span>充电控制</span><b id="ctl-module-charge">启停与上限</b>
-              <button class="ctl-switch" data-switch="charge" type="button" role="switch" aria-checked="false" aria-label="充电开关"><i></i></button>
+              <button class="ctl-switch ic-charge" data-switch="charge" type="button" role="switch" aria-checked="false" aria-label="充电开关"><i></i></button>
             </div>
             <div class="ctl-module" data-panel="lights" role="button" tabindex="0" style="--mc:var(--series-4)">
               <span>车灯与鸣笛</span><b id="ctl-module-lights">闪灯 / 连续闪灯</b>
-              <button class="ctl-switch" data-switch="lights" type="button" role="switch" aria-checked="false" aria-label="连续闪灯开关"><i></i></button>
+              <button class="ctl-switch ic-lights" data-switch="lights" type="button" role="switch" aria-checked="false" aria-label="连续闪灯开关"><i></i></button>
             </div>
             <div class="ctl-module" data-panel="nap" role="button" tabindex="0" style="--mc:var(--cat-idle)">
               <span>午休模式</span><b id="ctl-module-nap">定时露营</b>
-              <button class="ctl-switch" data-switch="nap" type="button" role="switch" aria-checked="false" aria-label="午休模式开关"><i></i></button>
+              <button class="ctl-switch ic-nap" data-switch="nap" type="button" role="switch" aria-checked="false" aria-label="午休模式开关"><i></i></button>
             </div>
           </div>
         </div>
@@ -517,7 +527,7 @@
   </section>
 
   <dialog id="ctl-dialog" aria-labelledby="ctl-dialog-title">
-    <div class="ctl-dialog-head"><h2 id="ctl-dialog-title"></h2><button id="ctl-dialog-close" aria-label="关闭操作窗口">×</button></div>
+    <div class="ctl-dialog-head"><h2 id="ctl-dialog-title"></h2><button id="ctl-dialog-close" class="ctl-dialog-close" aria-label="关闭操作窗口"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.3 5.7 16.9 4.3 12 9.2 7.1 4.3 5.7 5.7 10.6 12l-4.9 4.9 1.4 1.4 4.9-4.9 4.9 4.9 1.4-1.4-4.9-4.9z"/></svg></button></div>
     <p id="ctl-dialog-state"></p><div id="ctl-dialog-body"></div><p id="ctl-dialog-message" role="status" aria-live="polite"></p>
   </dialog>
 
@@ -584,7 +594,7 @@
 
 <script src="/echarts.min.js"></script>
 <script src="/leaflet.js"></script>
-<script src="/control.js?v=2"></script>
+<script src="/control.js?v=3"></script>
 <script src="/app.js"></script>
 </body>
 </html>

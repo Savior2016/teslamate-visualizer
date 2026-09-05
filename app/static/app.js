@@ -1317,6 +1317,8 @@
       const WW = 146;  // 前风挡宽(x 97..243),横向填充
       wr.setAttribute('width',
         (usable === null ? 0 : Math.max(0, Math.min(100, usable)) / 100 * WW).toFixed(1));
+      // 充电中:填充变绿并循环扫光(见 style.css .car-svg.charging)
+      wr.closest('svg').classList.toggle('charging', o.state === 'charging');
     }
     $('#car-batt-val').textContent = usable === null ? '—' : `${fmtNum(usable, 0)}%`;
     // 车型徽章:Model Y L 显示官方尾标图,其他车型回退字标文字

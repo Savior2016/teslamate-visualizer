@@ -479,12 +479,27 @@ button { touch-action: manipulation; }
   opacity: 0.35;
 }
 
-/* 前风挡:当前电量横向填充(左→右) */
+/* 前风挡:当前电量横向填充(左→右);充电时变绿 + 循环扫光 + 呼吸 */
 .car-ws-fill {
   fill: var(--series-1);
   opacity: 0.85;
-  transition: width 0.6s ease;
+  transition: width 0.6s ease, fill 0.4s ease;
 }
+.car-charge-shine {
+  fill: url(#car-charge-grad);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+.car-svg.charging .car-ws-fill {
+  fill: var(--cat-charge);
+  animation: car-charge-pulse 1.8s ease-in-out infinite;
+}
+.car-svg.charging .car-charge-shine { opacity: 1; animation: car-charge-sweep 1.8s linear infinite; }
+@keyframes car-charge-sweep {
+  from { transform: translateX(0) skewX(-16deg); }
+  to { transform: translateX(205px) skewX(-16deg); }
+}
+@keyframes car-charge-pulse { 50% { opacity: 1; } }
 
 /* 能量占比环:围绕玻璃顶一圈,各段用 dasharray 沿环分布 */
 .carring {
@@ -1722,10 +1737,10 @@ footer a { color: var(--text-muted); }
   filter: drop-shadow(0 0 6px color-mix(in srgb, var(--zc, var(--series-1)) 55%, transparent));
 }
 .ctl-zone.on .zone-shape {
-  fill: color-mix(in srgb, var(--zc, var(--series-1)) 38%, transparent);
-  stroke: var(--zc, var(--series-1));
-  stroke-width: 1.2;
-  filter: drop-shadow(0 0 7px color-mix(in srgb, var(--zc, var(--series-1)) 55%, transparent));
+  fill: color-mix(in srgb, var(--series-3) 48%, transparent);
+  stroke: var(--series-3);
+  stroke-width: 1.4;
+  filter: drop-shadow(0 0 8px color-mix(in srgb, var(--series-3) 60%, transparent));
 }
 .ctl-zone.busy .zone-shape { animation: ctlzone-pulse 1s ease-in-out infinite; }
 @keyframes ctlzone-pulse { 50% { fill: color-mix(in srgb, var(--zc, var(--series-1)) 28%, transparent); } }
@@ -1739,9 +1754,9 @@ footer a { color: var(--text-muted); }
   user-select: none;
 }
 .zone-lab-v { font-size: 9.5px; }
-.ctl-zone.on .zone-ico { fill: var(--zc, var(--series-1)); opacity: 1; }
-.ctl-zone.on .zone-ico-stroke { fill: none; stroke: var(--zc, var(--series-1)); }
-.ctl-zone.on .zone-lab { fill: var(--zc, var(--series-1)); }
+.ctl-zone.on .zone-ico { fill: var(--series-3); opacity: 1; }
+.ctl-zone.on .zone-ico-stroke { fill: none; stroke: var(--series-3); }
+.ctl-zone.on .zone-lab { fill: var(--series-3); }
 .ctl-zone .ico-unlocked { display: none; }
 .ctl-zone.unlocked .ico-locked { display: none; }
 .ctl-zone.unlocked .ico-unlocked { display: block; }

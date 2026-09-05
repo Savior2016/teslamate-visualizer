@@ -98,14 +98,15 @@
     items.forEach(item=>{const b=document.createElement('button');b.textContent=item.label;b.type='button';b.disabled=!canWrite();b.addEventListener('click',()=>command(item));row.appendChild(b);});
     $('ctl-dialog-body').appendChild(row);
   }
-  /* 开关行:滑块即开/关,滑动与变色即状态;flip 返回新的开态(null=保持不变) */
-  function switchRow(label,hint,isOn,flip){
+  /* 开关行:滑块即开/关,滑动与变色即状态;旋钮带模块图形标识(ic-* 类),flip 返回新的开态(null=保持不变) */
+  function switchRow(label,hint,isOn,flip,icon,color){
     const row=document.createElement('div');row.className='ctl-switch-row';
     const box=document.createElement('div');
     const span=document.createElement('span');span.textContent=label;box.appendChild(span);
     if(hint){const small=document.createElement('small');small.textContent=hint;box.appendChild(small);}
     row.appendChild(box);
-    const sw=document.createElement('button');sw.type='button';sw.className='ctl-switch';sw.setAttribute('role','switch');
+    const sw=document.createElement('button');sw.type='button';sw.className='ctl-switch'+(icon?' ic-'+icon:'');sw.setAttribute('role','switch');
+    if(color)sw.style.setProperty('--mc',color);
     sw.setAttribute('aria-checked',isOn?'true':'false');sw.setAttribute('aria-label',label+'开关');sw.disabled=!canWrite();
     sw.classList.toggle('on',isOn);sw.appendChild(document.createElement('i'));
     sw.addEventListener('click',async()=>{
@@ -137,12 +138,12 @@
       tip(`当前空调：${tri(s.climate_on)} · 车内 ${num(s.inside_temp)} · 设定 ${num(s.climate_temp)}`);
       input('ctl-temp-input','设定温度（15–30°C）',s.climate_temp??21.5,15,30,.5);
       addButtons([btn('设置温度','set_temps')]);
-      switchRow('空调','开启后按设定温度运转',s.climate_on===true,flipCmd(['auto_conditioning_start',{}],['auto_conditioning_stop',{}]));
+      switchRow('空调','开启后按设定温度运转',s.climate_on===true,flipCmd(['auto_conditioning_start',{}],['auto_conditioning_stop',{}]),'climate','var(--series-1)');
     }else if(name==='charge'){
       tip(`当前：${tri(s.charging,'充电中','未充电')} · ${tri(s.cable,'已插枪','未插枪')}`);
       input('ctl-limit-input','充电上限（50–100%）',s.charge_limit??80,50,100,1);
       addButtons([btn('设置上限','set_charge_limit')]);
-      switchRow('充电','开始或停止当前充电',s.charging===true,flipCmd(['charge_start',{}],['charge_stop',{}]));
+      switchRow('充电','开始或停止当前充电',s.charging===true,flipCmd(['charge_start',{}],['charge_stop',{}]),'charge','var(--cat-charge)');
     }else if(name==='lights'){
       addButtons([btn('闪灯一次','flash_lights'),btn('鸣笛一次','honk_horn',{},'确认鸣笛？请注意周围环境。')]);
       const segLabel=document.createElement('p');segLabel.className='ctl-tip';segLabel.textContent='连续闪灯时长（仅选择，不发送）：';$('ctl-dialog-body').appendChild(segLabel);
@@ -153,7 +154,7 @@
         seg.appendChild(b);
       });
       $('ctl-dialog-body').appendChild(seg);
-      switchRow('连续闪灯','按所选时长闪灯，可随时关闭',model.strobe_active===true,flipCmd(['flash_strobe',()=>({seconds:strobeSeconds}),()=>`确认连续闪灯 ${strobeSeconds} 秒？`],['flash_strobe_stop',{}]));
+      switchRow('连续闪灯','按所选时长闪灯，可随时关闭',model.strobe_active===true,flipCmd(['flash_strobe',()=>({seconds:strobeSeconds}),()=>`确认连续闪灯 ${strobeSeconds} 秒？`],['flash_strobe_stop',{}]),'lights','var(--series-4)');
       tip('连续闪灯由服务器逐次发送，频率受网络和车辆响应限制。');
     }else if(name==='nap'){
       const p=document.createElement('p');p.id='ctl-nap-status';body.appendChild(p);
@@ -163,7 +164,7 @@
         if(target){const field=$('ctl-nap-minutes');if(!field.reportValidity()||!field.value)return null;await nap(true,Number(field.value));}
         else await nap(false);
         return active();  // 滑块始终同步到实际状态(取消/失败时弹回原位)
-      });
+      },'nap','var(--cat-idle)');
       tip('服务器或车辆断网会延迟关闭；界面会显示重试状态，请在 Tesla App 确认。结束只退出露营模式，不额外发送关闭空调指令。');renderNap();
     }else if(name==='frunk'||name==='trunk'){
       const key=name==='frunk'?'frunk_open':'trunk_open';
@@ -173,14 +174,14 @@
         :[btn('操作后备箱','actuate_trunk',{which_trunk:'rear'},'确认开合后备箱？请确认周围有足够空间。')]);
     }else{
       const specs={
-        lock:{label:'车锁',key:'locked',triOn:'已锁',triOff:'未锁',on:['door_lock',{}],off:['door_unlock',{},'确认解锁车辆？']},
-        sentry:{label:'哨兵模式',key:'sentry',triOn:'开启',triOff:'关闭',on:['set_sentry_mode',{on:true}],off:['set_sentry_mode',{on:false}]},
-        windows:{label:'车窗通风',key:'windows_open',triOn:'通风中',triOff:'已关闭',on:['window_control',{command:'vent'}],off:['window_control',{command:'close'}]},
-        chargeport:{label:'充电口',key:'charge_port',triOn:'已打开',triOff:'已关闭',on:['charge_port_door_open',{}],off:['charge_port_door_close',{}]},
+        lock:{label:'车锁',key:'locked',triOn:'已锁',triOff:'未锁',on:['door_lock',{}],off:['door_unlock',{},'确认解锁车辆？'],icon:'lock',color:'var(--series-3)'},
+        sentry:{label:'哨兵模式',key:'sentry',triOn:'开启',triOff:'关闭',on:['set_sentry_mode',{on:true}],off:['set_sentry_mode',{on:false}],icon:'sentry',color:'var(--cat-sentry)'},
+        windows:{label:'车窗通风',key:'windows_open',triOn:'通风中',triOff:'已关闭',on:['window_control',{command:'vent'}],off:['window_control',{command:'close'}],icon:'windows',color:'var(--seq-blue-300)'},
+        chargeport:{label:'充电口',key:'charge_port',triOn:'已打开',triOff:'已关闭',on:['charge_port_door_open',{}],off:['charge_port_door_close',{}],icon:'chargeport',color:'var(--cat-charge)'},
       };
       const spec=specs[name];if(!spec)return;
       tip('当前状态：'+tri(s[spec.key],spec.triOn,spec.triOff));
-      switchRow(spec.label,'滑动即下发指令，滑块位置即当前状态',s[spec.key]===true,flipCmd(spec.on,spec.off));
+      switchRow(spec.label,'滑动即下发指令，滑块位置即当前状态',s[spec.key]===true,flipCmd(spec.on,spec.off),spec.icon,spec.color);
     }
     if(!dialog.open)dialog.showModal();
   }
