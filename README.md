@@ -1,5 +1,8 @@
 # TESLA Home
 
+> 安全升级：新增独立的 `PANEL_DATABASE_PASSWORD`、管理员/只读角色与非 root 容器。旧部署请先阅读 [升级与备份恢复说明](docs/MAINTENANCE.md)。旧登录会话会失效；网页不再接受数据库恢复上传。默认 8080 仅监听本机，通过 SSH 隧道或 HTTPS 访问。
+
+
 [English](README.en.md) | 中文
 
 特斯拉车辆数据一体化自托管方案:**TeslaMate**(数据采集)+ **TESLA Home 面板**(可视化),一个 `docker compose` 全部搞定。

@@ -21,7 +21,7 @@
   }
 
   // TeslaMate 管理页链接:与面板同主机,端口 4000(仅本机监听时提示 SSH 隧道)
-  const tmUrl = `${location.protocol}//${location.hostname}:4000`;
+  const tmUrl = 'http://localhost:4000';
   $('teslamate-link').href = tmUrl;
   $('teslamate-url').textContent = tmUrl;
   $('ssh-tunnel-cmd').textContent = `ssh -L 4000:127.0.0.1:4000 用户@${location.hostname}`;
@@ -55,7 +55,14 @@
     }
   }
 
+  let guideInitialized = false;
   function renderStatus(s) {
+    $('account-admin').hidden = s.role !== 'admin';
+    $('backup-admin').hidden = s.role !== 'admin';
+    if (!guideInitialized) {
+      $('authorization-guide').open = !s.steps.authorized;
+      guideInitialized = true;
+    }
     $('acct-user-name').textContent = s.user || '—';
 
     const banner = $('tesla-banner');
@@ -86,16 +93,16 @@
       $('stat-last').textContent = fmtAgo(s.sync.last_data_ts);
     }
 
-    renderUsers(s.users || [], s.user);
+    renderUsers(s.users || [], s.user, s.roles || {});
   }
 
-  function renderUsers(users, me) {
+  function renderUsers(users, me, roles) {
     const ul = $('user-list');
     ul.textContent = '';
     for (const u of users) {
       const li = document.createElement('li');
       const name = document.createElement('span');
-      name.textContent = u;
+      name.textContent = `${u} · ${roles[u] === 'admin' ? '管理员' : '只读'}`;
       li.appendChild(name);
       if (u === me) {
         const tag = document.createElement('span');
@@ -184,7 +191,7 @@
       await api('/api/account/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username, password, role: $('nu-role').value }),
       });
       msg(m, `✓ 已添加账号 ${username}`, true);
       $('nu-name').value = '';
@@ -208,31 +215,33 @@
   /* ---------- 数据备份 / 迁移 ---------- */
   const bkMsg = $('bk-msg');
 
-  $('bk-export').onclick = () => {
-    msg(bkMsg, '正在生成备份(数据库较大时可能需要一两分钟)…', true);
-    window.location = '/api/backup/export';
-    setTimeout(() => msg(bkMsg, '✓ 导出已开始下载', true), 3000);
-  };
-
-  $('bk-import').onclick = async () => {
-    const f = $('bk-file').files[0];
-    if (!f) { msg(bkMsg, '请先选择备份文件(.tar.gz)', false); return; }
-    if (!confirm(`确定导入「${f.name}」?\n\n导入会覆盖当前数据库与面板账号,不可撤销。`)) return;
-    const btn = $('bk-import');
-    btn.disabled = true;
-    msg(bkMsg, '上传并恢复中,请勿关闭页面…', true);
+  $('bk-export').onclick = async () => {
+    const button = $('bk-export');
+    const password = $('bk-password').value;
+    if (!password) return msg(bkMsg, '请输入当前密码确认导出', false);
+    button.disabled = true;
+    msg(bkMsg, '正在生成备份，请等待下载完成…', true);
     try {
-      const fd = new FormData();
-      fd.append('file', f);
-      const r = await fetch('/api/backup/import', { method: 'POST', body: fd });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.detail || `HTTP ${r.status}`);
-      msg(bkMsg, `✓ 恢复完成${data.users_restored ? '(含面板账号)' : ''}。建议刷新面板首页确认数据。`, true);
-      $('bk-file').value = '';
+      const response = await fetch('/api/backup/export', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.detail || `导出失败 (${response.status})`);
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url; link.download = `tesla-home-backup-${new Date().toISOString().slice(0, 10)}.tar.gz`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      msg(bkMsg, '备份已生成并交给浏览器下载，请确认文件已保存', true);
     } catch (e) {
       msg(bkMsg, e.message, false);
     } finally {
-      btn.disabled = false;
+      $('bk-password').value = '';
+      button.disabled = false;
     }
   };
 

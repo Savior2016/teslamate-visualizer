@@ -119,16 +119,19 @@ def _live_states() -> dict:
     """车辆实际上报的状态(空调/充电/充电线),作为乐观推测的底盘,实时项以它为准。"""
     m = _m()
     out: dict = {}
-    rows = m.q("SELECT is_climate_on, driver_temp_setting FROM positions "
-               "ORDER BY date DESC LIMIT 1")
+    cid = m.get_car_id(None)
+    rows = m.q("SELECT is_climate_on, driver_temp_setting, EXTRACT(EPOCH FROM date AT TIME ZONE 'UTC') * 1000 AS ts FROM positions "
+               "WHERE car_id=%s ORDER BY date DESC LIMIT 1", (cid,))
     if rows:
-        out["climate_on"] = bool(rows[0]["is_climate_on"])
-        if rows[0]["driver_temp_setting"] is not None:
+        out["reported_at"] = int(rows[0]["ts"])
+        fresh = time.time() * 1000 - out["reported_at"] < 15 * 60 * 1000
+        out["climate_on"] = rows[0]["is_climate_on"] if fresh else None
+        if fresh and rows[0]["driver_temp_setting"] is not None:
             out["climate_temp"] = float(rows[0]["driver_temp_setting"])
-    out["charging"] = bool(m.q("SELECT 1 FROM charging_processes "
-                               "WHERE end_date IS NULL LIMIT 1"))
-    rows = m.q("SELECT conn_charge_cable FROM charges ORDER BY date DESC LIMIT 1")
-    out["cable"] = bool(rows and rows[0]["conn_charge_cable"])
+        out["charging"] = bool(m.q("SELECT 1 FROM charging_processes "
+                                    "WHERE car_id=%s AND end_date IS NULL LIMIT 1", (cid,))) if fresh else None
+    # A historical charge sample cannot establish the current cable connection.
+    out["cable"] = None
     return out
 
 
@@ -170,7 +173,9 @@ def _validate_args(cmd: str, args: dict) -> dict:
     for k, rule in spec.items():
         v = args.get(k)
         if isinstance(rule, type) and rule is bool:
-            out[k] = bool(v)
+            if not isinstance(v, bool):
+                raise HTTPException(status_code=422, detail=f"参数 {k} 应为布尔值")
+            out[k] = v
         elif isinstance(rule, tuple) and rule and isinstance(rule[0], (int, float)):
             try:
                 v = float(v)
@@ -276,6 +281,7 @@ def control_status():
 @router.post("/api/control/command")
 def send_command(body: CommandIn, request: Request):
     """下发车辆指令:白名单校验 → 节流 → 转发指令后端,返回 Tesla 侧执行结果。"""
+    _m().require_admin(request)
     if not (CONTROL_API_URL and CONTROL_API_TOKEN):
         raise HTTPException(status_code=503, detail="控制功能未配置,请先在 .env 设置 CONTROL_API_URL / CONTROL_API_TOKEN")
     # 爆闪为本地面板功能(循环 flash_lights),不直接转发;计 1 次节流

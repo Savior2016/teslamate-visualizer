@@ -24,7 +24,9 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 from psycopg.rows import dict_row
+from psycopg.conninfo import make_conninfo
 from psycopg.types.json import Jsonb
 from psycopg_pool import ConnectionPool
 from pydantic import BaseModel
@@ -40,158 +42,88 @@ DISPLAY_TZ = os.environ.get("DISPLAY_TZ", "Asia/Shanghai")
 if not re.fullmatch(r"[A-Za-z_0-9+/.-]{1,64}", DISPLAY_TZ):
     DISPLAY_TZ = "Asia/Shanghai"
 
-# 账号体系:存 /data/users.json(pbkdf2_sha256 哈希),动态读取(mtime 缓存),
-# 个人中心改密码即刻生效、无需重启;网页登录(会话 Cookie)与 HTTP Basic Auth 共用此表。
-# 首次启动时文件不存在,则用环境变量播种:VISUALIZER_USERS="user1:pass1,user2:pass2"
-# (密码可含冒号,取首个冒号分割);之后改动环境变量不再生效。
+# Fail closed on account configuration errors; legacy cookies are intentionally revoked.
+from .auth import AccountStore, AuthConfigurationError, SESSION_TTL, verify_password
+from ipaddress import ip_address, ip_network
+from urllib.parse import urlsplit
+import socket
+from functools import lru_cache
+
 USERS_FILE = os.environ.get("USERS_FILE", "/data/users.json")
-_users_lock = threading.Lock()
-_users_cache: tuple[float, dict[str, str]] | None = None  # (mtime, {user: 哈希串})
+accounts = AccountStore(USERS_FILE)
+seeds = os.environ.get("VISUALIZER_USERS", "")
+if not seeds and os.environ.get("VISUALIZER_USER") and os.environ.get("VISUALIZER_PASS"):
+    seeds = os.environ["VISUALIZER_USER"] + ":" + os.environ["VISUALIZER_PASS"]
+accounts.seed(seeds, os.environ.get("PANEL_ADMIN_USERS", ""))
+auth_users = accounts.users
+_verify_password = verify_password
+_make_session = accounts.create_session
+_session_user = accounts.session_user
+SESSION_COOKIE = "ttv_session"
+TRUSTED_PROXIES = tuple(ip_network(x.strip()) for x in
+                        os.environ.get("TRUSTED_PROXY_CIDRS", "127.0.0.1/32,::1/128").split(",") if x.strip())
+_failures = {}
+_failure_lock = threading.Lock()
+FAIL_WINDOW, FAIL_THRESHOLD, LOCKOUT = 600, 10, 300
 
 
-def _hash_password(pw: str) -> str:
-    """pbkdf2_sha256(标准库实现):返回 'pbkdf2_sha256$迭代次数$salt_hex$hash_hex'。"""
-    iterations = 210_000
-    salt = secrets.token_hex(16)
-    dk = hashlib.pbkdf2_hmac("sha256", pw.encode("utf-8"), bytes.fromhex(salt), iterations)
-    return f"pbkdf2_sha256${iterations}${salt}${dk.hex()}"
+@lru_cache(maxsize=8)
+def _proxy_addresses(period):
+    addresses = set()
+    for host in os.environ.get("TRUSTED_PROXY_HOSTS", "").split(","):
+        if not host.strip():
+            continue
+        try:
+            addresses.update(ip_address(row[4][0]) for row in socket.getaddrinfo(host.strip(), None))
+        except OSError:
+            pass
+    return addresses
 
 
-def _verify_password(pw: str, stored: str) -> bool:
+def _trusted_proxy(request):
     try:
-        _algo, iters, salt, expect = stored.split("$", 3)
-        dk = hashlib.pbkdf2_hmac("sha256", pw.encode("utf-8"), bytes.fromhex(salt), int(iters))
-        return secrets.compare_digest(dk.hex(), expect)
-    except (ValueError, TypeError):
+        peer = ip_address(request.client.host)
+        return any(peer in net for net in TRUSTED_PROXIES) or peer in _proxy_addresses(int(time.time() // 30))
+    except (ValueError, AttributeError):
         return False
 
 
-def _save_users(users: dict[str, str]) -> None:
-    """原子写入账号文件。"""
-    with _users_lock:
-        tmp = USERS_FILE + ".tmp"
-        os.makedirs(os.path.dirname(USERS_FILE) or ".", exist_ok=True)
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump({"users": users}, f, ensure_ascii=False, indent=1)
-        os.replace(tmp, USERS_FILE)
-
-
-def _seed_users() -> None:
-    """首次启动:账号文件不存在时从环境变量播种(已存在则跳过)。"""
-    if os.path.exists(USERS_FILE):
-        return
-    seeds: dict[str, str] = {}
-    for part in os.environ.get("VISUALIZER_USERS", "").split(","):
-        u, sep, p = part.partition(":")
-        if sep and u.strip() and p:
-            seeds[u.strip()] = _hash_password(p)
-    legacy_user = os.environ.get("VISUALIZER_USER", "")
-    legacy_pass = os.environ.get("VISUALIZER_PASS", "")
-    if legacy_user and legacy_pass:
-        seeds[legacy_user] = _hash_password(legacy_pass)
-    if seeds:
-        _save_users(seeds)
-
-
-def auth_users() -> dict[str, str]:
-    """动态读取账号表 {用户名: 哈希串};文件缺失/损坏时为空(不启用认证)。"""
-    global _users_cache
-    try:
-        mtime = os.path.getmtime(USERS_FILE)
-    except OSError:
-        return {}
-    if _users_cache and _users_cache[0] == mtime:
-        return _users_cache[1]
-    users: dict[str, str] = {}
-    try:
-        with open(USERS_FILE, encoding="utf-8") as f:
-            data = json.load(f)
-        raw = data.get("users") if isinstance(data, dict) else None
-        if isinstance(raw, dict):
-            users = {str(k): str(v) for k, v in raw.items()}
-    except (OSError, ValueError, TypeError):
-        users = {}
-    _users_cache = (mtime, users)
-    return users
-
-
-_seed_users()
-
-# 登录失败限速:同一 IP 10 分钟内失败 10 次则锁定 5 分钟
-_failures: dict[str, list[float]] = defaultdict(list)
-FAIL_WINDOW = 600.0
-FAIL_THRESHOLD = 10
-LOCKOUT = 300.0
-
-
-def _client_ip(request: Request) -> str:
-    """真实客户端 IP:应用只在 Caddy 反代之后可达(8080 仅绑 127.0.0.1),
-    取 Caddy 写入的 X-Forwarded-For 首段,否则所有访客共享一个限流计数,
-    扫描器一探测就全站 429。"""
-    xff = request.headers.get("X-Forwarded-For", "")
-    return xff.split(",")[0].strip() or (request.client.host if request.client else "?")
-
-
-def _is_locked(ip: str) -> bool:
-    """该 IP 是否处于登录失败锁定期(顺带清理过期失败记录)。"""
-    now = time.time()
-    fails = [t for t in _failures[ip] if now - t < FAIL_WINDOW]
-    _failures[ip] = fails
-    return len(fails) >= FAIL_THRESHOLD and now - fails[-FAIL_THRESHOLD] < LOCKOUT
-
-
-def _record_fail(ip: str) -> None:
-    _failures[ip].append(time.time())
-
-
-# 网页登录会话:HMAC 签名的 Cookie('base64url(user:expiry).hex签名'),
-# 密钥首次启动自动生成并持久化到 /data/.session_secret(0600),重启不失效。
-SESSION_COOKIE = "ttv_session"
-SESSION_TTL = 30 * 86400  # 30 天
-SESSION_SECRET_FILE = os.environ.get("SESSION_SECRET_FILE", "/data/.session_secret")
-_session_secret: bytes | None = None
-
-
-def _get_session_secret() -> bytes:
-    global _session_secret
-    if _session_secret is None:
+def _client_ip(request):
+    if _trusted_proxy(request):
         try:
-            with open(SESSION_SECRET_FILE, "r", encoding="ascii") as f:
-                _session_secret = bytes.fromhex(f.read().strip())
-        except (OSError, ValueError):
-            _session_secret = secrets.token_bytes(32)
-            try:
-                os.makedirs(os.path.dirname(SESSION_SECRET_FILE) or ".", exist_ok=True)
-                fd = os.open(SESSION_SECRET_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-                with os.fdopen(fd, "w", encoding="ascii") as f:
-                    f.write(_session_secret.hex())
-            except OSError:
-                pass  # 文件不可写时仅本次进程内有效,重启后所有会话失效
-    return _session_secret
+            return str(ip_address(request.headers.get("x-forwarded-for", "").split(",")[-1].strip()))
+        except ValueError:
+            pass
+    return request.client.host if request.client else "unknown"
 
 
-def _make_session(user: str) -> str:
-    payload = base64.urlsafe_b64encode(
-        f"{user}:{int(time.time()) + SESSION_TTL}".encode("utf-8")).decode("ascii")
-    sig = hmac.new(_get_session_secret(), payload.encode("ascii"), hashlib.sha256).hexdigest()
-    return f"{payload}.{sig}"
+def _https(request):
+    return request.url.scheme == "https" or (_trusted_proxy(request) and
+        request.headers.get("x-forwarded-proto", "").lower() == "https")
 
 
-def _session_user(token: str) -> str:
-    """校验会话 Cookie,通过且账号仍存在时返回用户名,否则返回空串。"""
-    payload, sep, sig = token.rpartition(".")
-    if not sep:
-        return ""
-    expect = hmac.new(_get_session_secret(), payload.encode("ascii"), hashlib.sha256).hexdigest()
-    if not secrets.compare_digest(sig, expect):
-        return ""
-    try:
-        user, exp = base64.urlsafe_b64decode(payload.encode("ascii")).decode("utf-8").rsplit(":", 1)
-        if int(exp) < time.time():
-            return ""
-    except (ValueError, UnicodeDecodeError):
-        return ""
-    return user if user in auth_users() else ""
+def _is_locked(key):
+    with _failure_lock:
+        now = time.time()
+        for k in list(_failures):
+            _failures[k] = [t for t in _failures[k] if now - t < FAIL_WINDOW]
+            if not _failures[k]:
+                del _failures[k]
+        fails = _failures.get(key, [])
+        return len(fails) >= FAIL_THRESHOLD and now - fails[-FAIL_THRESHOLD] < LOCKOUT
+
+
+def _record_fail(key):
+    with _failure_lock:
+        if key not in _failures and len(_failures) >= 4096:
+            _failures.pop(next(iter(_failures)))
+        _failures.setdefault(key, []).append(time.time())
+        _failures[key] = _failures[key][-FAIL_THRESHOLD:]
+
+
+def require_admin(request):
+    if getattr(request.state, "role", "") != "admin":
+        raise HTTPException(status_code=403, detail="需要管理员权限")
 
 # 每次理想续航(km)对应的可用电量(kWh),用于估算行程能耗;
 # 当充电历史足够时按实际数据自动校准。
@@ -328,18 +260,16 @@ def _loc_key(address_id, geofence_id) -> str | None:
 async def lifespan(_: FastAPI):
     global pool
     pool = ConnectionPool(
-        conninfo=(
-            f"host={DATABASE_HOST} port={DATABASE_PORT} dbname={DATABASE_NAME} "
-            f"user={DATABASE_USER} password={DATABASE_PASS} "
-            "options='-c timezone=UTC'"
-        ),
+        conninfo=make_conninfo(host=DATABASE_HOST, port=DATABASE_PORT, dbname=DATABASE_NAME,
+                               user=DATABASE_USER, password=DATABASE_PASS, options="-c timezone=UTC"),
         min_size=1,
         max_size=4,
         kwargs={"row_factory": dict_row},
     )
     with pool.connection() as conn:
         conn.execute("SELECT 1")
-        conn.execute(PANEL_MANUAL_DDL)
+        # panel_manual and grants are provisioned by the maintenance init service.
+        conn.execute("SELECT 1 FROM panel_manual LIMIT 1")
         _migrate_manual_files(conn)
         conn.commit()
     yield
@@ -350,56 +280,81 @@ app = FastAPI(title="TeslaMate Telemetry Visualizer", lifespan=lifespan)
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 
-# 无需认证即可访问的路径:健康检查、地图瓦片代理、登录页及其静态资源、登录/登出接口、
-# Tesla 虚拟钥匙公钥(Tesla 服务器拉取,必须公开)
-_AUTH_EXACT = {"/api/health", "/api/login", "/api/logout", "/login", "/login.js", "/style.css",
+# Static assets needed before login; all data including tiles requires authentication.
+_AUTH_EXACT = {"/api/health", "/api/login", "/api/logout", "/login", "/login.js", "/theme.js", "/style.css",
                "/.well-known/appspecific/com.tesla.3p.public-key.pem"}
-_AUTH_PREFIX = ("/api/tiles/", "/fonts/")
+_AUTH_PREFIX = ("/fonts/",)
+
+
+@app.exception_handler(AuthConfigurationError)
+async def auth_config_error(request, exc):
+    return JSONResponse({"detail": "账号配置不可用，请联系管理员"}, status_code=503)
 
 
 @app.middleware("http")
 async def auth_and_headers(request: Request, call_next):
-    """登录认证 + 基础安全响应头。
-
-    网页登录(会话 Cookie)为主;HTTP Basic Auth 保留兼容 curl / 第三方 API 访问。
-    未认证:API 路径返回 401 JSON(不带 WWW-Authenticate,避免浏览器弹原生登录框),
-    页面与静态资源 302 到 /login。
-    """
     path = request.url.path
-    users = auth_users()
-    if users and path not in _AUTH_EXACT \
-            and not any(path.startswith(p) for p in _AUTH_PREFIX):
-        ip = _client_ip(request)
-        if _is_locked(ip):
-            return JSONResponse({"detail": "尝试次数过多,请稍后再试"}, status_code=429)
-        user = ""
-        header = request.headers.get("Authorization", "")
-        if header.startswith("Basic "):
-            try:
-                u, pw = base64.b64decode(header[6:]).decode("utf-8").split(":", 1)
-                stored = users.get(u)
-                if stored is not None and _verify_password(pw, stored):
-                    user = u
-            except (ValueError, UnicodeDecodeError):
-                pass
-        if not user:
+    try:
+        public = path in _AUTH_EXACT or any(path.startswith(p) for p in _AUTH_PREFIX)
+        if request.method not in ("GET", "HEAD", "OPTIONS"):
+            origin = request.headers.get("origin")
+            if request.headers.get("sec-fetch-site") == "cross-site" or (origin and
+                    (urlsplit(origin).netloc != request.url.netloc or
+                     urlsplit(origin).scheme != ("https" if _https(request) else "http"))):
+                return JSONResponse({"detail": "不允许跨站操作"}, status_code=403)
+            length = request.headers.get("content-length", "0")
+            if not length.isdigit() or int(length) > 65536:
+                return JSONResponse({"detail": "请求内容过大"}, status_code=413)
+            chunks, size = [], 0
+            async for chunk in request.stream():
+                size += len(chunk)
+                if size > 65536:
+                    return JSONResponse({"detail": "请求内容过大"}, status_code=413)
+                chunks.append(chunk)
+            request._body = b"".join(chunks)
+        if not public:
+            users = auth_users()  # raises on missing, corrupt or empty configuration
+            user = ""
             token = request.cookies.get(SESSION_COOKIE, "")
             if token:
                 user = _session_user(token)
-        if not user:
-            if not header:  # 会话失效的 Cookie 不计入失败,只有显式错误的 Basic 凭证才计数
-                pass
-            else:
-                _record_fail(ip)
-            if path.startswith("/api/"):
-                return JSONResponse({"detail": "未登录"}, status_code=401)
-            from urllib.parse import quote
-            return RedirectResponse(url=f"/login?next={quote(path)}", status_code=302)
-        request.state.user = user  # 供个人中心接口识别当前登录账号
-    response = await call_next(request)
+            header = request.headers.get("Authorization", "")
+            if not user and header.startswith("Basic "):
+                try:
+                    u, pw = base64.b64decode(header[6:], validate=True).decode("utf-8").split(":", 1)
+                    key = (_client_ip(request), u[:32])
+                    if _is_locked(key):
+                        return JSONResponse({"detail": "尝试次数过多，请稍后再试"}, status_code=429)
+                    if await run_in_threadpool(_verify_password, pw, users.get(u)):
+                        user = u
+                    else:
+                        _record_fail(key)
+                except (ValueError, UnicodeDecodeError):
+                    pass
+            if not user:
+                if path.startswith("/api/"):
+                    return JSONResponse({"detail": "未登录"}, status_code=401)
+                from urllib.parse import quote
+                return RedirectResponse(url=f"/login?next={quote(path)}", status_code=302)
+            request.state.user = user
+            request.state.role = accounts.roles()[user]
+            if request.state.role != "admin" and (
+                    path.startswith("/api/backup/") or
+                    (request.method not in ("GET", "HEAD", "OPTIONS") and
+                     path != "/api/account/password")):
+                return JSONResponse({"detail": "只读账号不能执行此操作"}, status_code=403)
+        response = await call_next(request)
+    except AuthConfigurationError:
+        response = JSONResponse({"detail": "账号配置不可用，请联系管理员"}, status_code=503)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; "
+        "object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
+    if path.startswith("/api/") and not path.startswith("/api/tiles/"):
+        response.headers["Cache-Control"] = "no-store"
     return response
 
 # 将 UTC 时间戳转为本地墙钟时间 / 绝对毫秒时间戳的 SQL 片段
@@ -505,7 +460,7 @@ def health():
         q("SELECT 1")
         return {"status": "ok", "database": "connected", "tz": DISPLAY_TZ}
     except Exception as exc:  # noqa: BLE001
-        return {"status": "error", "database": str(exc), "tz": DISPLAY_TZ}
+        return JSONResponse({"status": "error", "database": "unavailable"}, status_code=503)
 
 
 # 地图瓦片同源代理:手机端只需连通本站即可出图(直连 CDN 在国内移动网络下不稳,
@@ -519,39 +474,44 @@ TILE_HEADERS = {
     "Accept": "image/png,image/*;q=0.8",
 }
 _tile_lock = threading.Lock()
+_tile_fetch_slots = threading.BoundedSemaphore(4)
+from .tile_cache import TileCache
+_tile_cache = TileCache(TILE_CACHE_DIR)
 
 
 @app.get("/api/tiles/{style}/{z}/{x}/{y}")
 def map_tile(style: str, z: int, x: int, y: str):
     m = re.fullmatch(r"(\d{1,7})(@2x)?\.png", y)
-    if m is None or style not in ("dark", "light") or not (0 <= z <= 19) or not (0 <= x < 2 ** 21):
+    if m is None or style not in ("dark", "light") or not (0 <= z <= 19) or not (0 <= x < 2 ** z):
         raise HTTPException(status_code=404, detail="瓦片不存在")
     yy = m.group(1)
-    if not (0 <= int(yy) < 2 ** 21):
+    if not (0 <= int(yy) < 2 ** z):
         raise HTTPException(status_code=404, detail="瓦片不存在")
     cache_path = os.path.join(TILE_CACHE_DIR, str(z), str(x), f"{yy}.png")
     if os.path.isfile(cache_path):
-        return FileResponse(cache_path, headers={"Cache-Control": "public, max-age=2592000"})
+        return FileResponse(cache_path, headers={"Cache-Control": "private, max-age=86400"})
+    if not _tile_fetch_slots.acquire(blocking=False):
+        raise HTTPException(status_code=429, detail="地图请求繁忙，请稍后重试")
     sub = "abc"[(x + int(yy)) % 3]
     url = TILE_UPSTREAM.format(s=sub, z=z, x=x, y=yy)
     try:
         req = urllib.request.Request(url, headers=TILE_HEADERS)
         with urllib.request.urlopen(req, timeout=10) as resp:
-            data = resp.read()
+            data = resp.read(1024 * 1024 + 1)
     except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status_code=502, detail=f"上游瓦片获取失败: {exc}") from exc
+        raise HTTPException(status_code=502, detail="地图暂时不可用") from exc
+    finally:
+        _tile_fetch_slots.release()
+    if len(data) > 1024 * 1024:
+        raise HTTPException(status_code=502, detail="地图瓦片过大")
     if not data.startswith(b"\x89PNG"):
         raise HTTPException(status_code=502, detail="上游返回的不是 PNG")
     with _tile_lock:
-        os.makedirs(os.path.dirname(cache_path), exist_ok=True)
-        tmp = cache_path + ".tmp"
-        with open(tmp, "wb") as f:
-            f.write(data)
-        os.replace(tmp, cache_path)
+        _tile_cache.put(cache_path, data)
     return Response(
         content=data,
         media_type="image/png",
-        headers={"Cache-Control": "public, max-age=2592000"},
+        headers={"Cache-Control": "private, max-age=86400"},
     )
 
 
@@ -586,7 +546,7 @@ def system_stats():
 
 
 @app.get("/api/overview")
-def overview(car_id: int | None = Query(default=None)):
+def overview(request: Request, car_id: int | None = Query(default=None)):
     cid = get_car_id(car_id)
     cars = q("SELECT id, name, model, trim_badging, efficiency FROM cars ORDER BY id")
 
@@ -680,6 +640,7 @@ def overview(car_id: int | None = Query(default=None)):
             }
             for c in cars
         ],
+        "role": request.state.role,
         "car_id": cid,
         "state": state,
         "software_version": version,
@@ -1524,6 +1485,7 @@ class PasswordChange(BaseModel):
 class UserAdd(BaseModel):
     username: str
     password: str
+    role: str = "viewer"
 
 
 @app.get("/api/account/status")
@@ -1535,7 +1497,9 @@ def account_status(request: Request):
     """
     status: dict = {
         "user": getattr(request.state, "user", ""),
-        "users": sorted(auth_users()),
+        "role": request.state.role,
+        "users": sorted(auth_users()) if request.state.role == "admin" else [request.state.user],
+        "roles": accounts.roles() if request.state.role == "admin" else {},
         "tesla": {"authorized": False, "token_updated_ts": None},
         "cars": [],
         "sync": {"last_data_ts": None, "positions": 0, "drives": 0, "charges": 0},
@@ -1577,49 +1541,35 @@ def account_status(request: Request):
 
 @app.post("/api/account/password")
 def change_password(body: PasswordChange, request: Request):
-    """修改当前登录账号的密码(需验证当前密码;写 users.json 即刻生效)。"""
-    user = getattr(request.state, "user", "")
-    users = auth_users()
-    if not user or user not in users:
-        raise HTTPException(status_code=401, detail="未登录")
-    if not _verify_password(body.current_password, users[user]):
-        raise HTTPException(status_code=403, detail="当前密码不正确")
-    if len(body.new_password) < 6:
-        raise HTTPException(status_code=400, detail="新密码至少 6 位")
-    fresh = dict(users)
-    fresh[user] = _hash_password(body.new_password)
-    _save_users(fresh)
-    return {"ok": True, "user": user}
+    key = (_client_ip(request), "password:" + request.state.user)
+    if _is_locked(key):
+        raise HTTPException(status_code=429, detail="尝试次数过多，请稍后再试")
+    try:
+        accounts.change_password(request.state.user, body.current_password, body.new_password)
+    except ValueError as exc:
+        _record_fail(key)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True}
 
 
 @app.post("/api/account/users")
-def add_user(body: UserAdd):
-    """新增面板账号(已登录用户均可添加)。"""
-    if not re.fullmatch(r"[A-Za-z0-9_.@-]{1,32}", body.username):
-        raise HTTPException(status_code=400, detail="用户名仅限字母数字与 _ . @ -,最长 32 位")
-    if len(body.password) < 6:
-        raise HTTPException(status_code=400, detail="密码至少 6 位")
-    users = dict(auth_users())
-    if body.username in users:
-        raise HTTPException(status_code=409, detail="账号已存在")
-    users[body.username] = _hash_password(body.password)
-    _save_users(users)
-    return {"ok": True, "users": sorted(users)}
+def add_user(body: UserAdd, request: Request):
+    require_admin(request)
+    try:
+        accounts.create_user(body.username, body.password, body.role)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True}
 
 
 @app.delete("/api/account/users/{name}")
 def remove_user(name: str, request: Request):
-    """删除面板账号(不能删除当前登录账号,也不能删除最后一个账号)。"""
-    users = dict(auth_users())
-    if name not in users:
-        raise HTTPException(status_code=404, detail="账号不存在")
-    if name == getattr(request.state, "user", ""):
-        raise HTTPException(status_code=400, detail="不能删除当前登录的账号")
-    if len(users) <= 1:
-        raise HTTPException(status_code=400, detail="至少保留一个账号")
-    del users[name]
-    _save_users(users)
-    return {"ok": True, "users": sorted(users)}
+    require_admin(request)
+    try:
+        accounts.remove_user(name, request.state.user)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True}
 
 
 class LoginBody(BaseModel):
@@ -1639,7 +1589,7 @@ def login_page(request: Request):
 @app.post("/api/login")
 def login(body: LoginBody, request: Request):
     """网页登录:校验账号后下发 HMAC 签名会话 Cookie(30 天);失败按 IP 限流。"""
-    ip = _client_ip(request)
+    ip = (_client_ip(request), body.username[:32])
     if _is_locked(ip):
         raise HTTPException(status_code=429, detail="尝试次数过多,请稍后再试")
     stored = auth_users().get(body.username)
@@ -1650,14 +1600,15 @@ def login(body: LoginBody, request: Request):
     resp.set_cookie(
         SESSION_COOKIE, _make_session(body.username),
         max_age=SESSION_TTL, httponly=True, samesite="lax", path="/",
-        secure=request.headers.get("X-Forwarded-Proto", "").lower() == "https",
+        secure=_https(request),
     )
     return resp
 
 
 @app.post("/api/logout")
-def logout():
+def logout(request: Request):
     """退出登录:清除会话 Cookie。"""
+    accounts.revoke(request.cookies.get(SESSION_COOKIE, ""))
     resp = JSONResponse({"ok": True})
     resp.delete_cookie(SESSION_COOKIE, path="/")
     return resp

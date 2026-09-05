@@ -58,6 +58,18 @@
     </div>
   </header>
 
+  <div class="filter-row">
+    <div class="seg" id="range-seg" role="group" aria-label="时间范围">
+      <button data-days="1">24 小时</button>
+      <button data-days="7" class="on">7 天</button>
+      <button data-days="30">30 天</button>
+    </div>
+    <span class="hint">数据源:TeslaMate · 每 60 秒自动刷新</span>
+  </div>
+
+  <p id="data-freshness" class="data-note" role="status"></p>
+  <p id="access-note" class="data-note" hidden>只读账号：可以查看数据，不能修改记录或操作车辆。</p>
+  <p id="load-warning" class="data-note stale" role="status" hidden></p>
   <!-- ===== 分页 1:总览 ===== -->
   <section class="page" id="page-overview">
   <div class="grid">
@@ -176,6 +188,16 @@
         </div>
         <div class="car-legend car-legend-r" id="car-legend-r"></div>
       </div>
+      <div class="vehicle-readings" aria-label="车辆上次上报读数">
+        <div><span>左前胎压</span><b id="reading-fl">—</b></div>
+        <div><span>右前胎压</span><b id="reading-fr">—</b></div>
+        <div><span>左后胎压</span><b id="reading-rl">—</b></div>
+        <div><span>右后胎压</span><b id="reading-rr">—</b></div>
+        <div><span>车内温度</span><b id="reading-inside">—</b></div>
+        <div><span>车外温度</span><b id="reading-outside">—</b></div>
+        <div><span>总里程</span><b id="reading-odo">—</b></div>
+        <div><span>陪伴记录</span><b id="reading-companion">—</b></div>
+      </div>
     </div>
   </div>
   </section>
@@ -200,7 +222,7 @@
 
     <div class="card col-12">
       <h2>充电记录</h2>
-      <div class="card-sub">每次充电补充的电量</div>
+      <div class="card-sub">最近 12 次充电补充的电量 · 此图不受顶部时间范围影响</div>
       <div class="chart" id="chart-charging"></div>
       <!-- 电池电量估算:实心柱=充后总电量,上方虚线柱=换算的估算满电 -->
       <div class="cg-divider">电池电量估算 <span>充后总电量 = 充至电量 × 估算满电;估算满电 = 充电量 ÷ 电量增幅(增幅 &lt;10% 的零碎充电不参与)</span></div>
@@ -361,7 +383,7 @@
       <div class="card-head">
         <div>
           <h2>车辆控制</h2>
-          <div class="card-sub">指令经你配置的 Tesla 指令后端签名后下发 · 敏感操作二次确认</div>
+          <div class="card-sub">车锁、哨兵与车窗显示最后一次指令记录，不代表当前状态；实时状态请以车辆或 Tesla App 为准。</div>
         </div>
         <div class="mini-stats" id="ctl-backend"></div>
       </div>
@@ -529,21 +551,11 @@
   </div>
   </section>
 
-  <div class="filter-row">
-    <div class="seg" id="range-seg" role="group" aria-label="时间范围">
-      <button data-days="1">24 小时</button>
-      <button data-days="7" class="on">7 天</button>
-      <button data-days="30">30 天</button>
-    </div>
-    <span class="hint">数据源:TeslaMate · 每 60 秒自动刷新</span>
-  </div>
-
   <footer>
-    <div class="footer-text">
-      本面板直接读取 TeslaMate 的 PostgreSQL 数据库(只读查询)。
-      时间均为 Asia/Shanghai;能耗按「理想续航差值 × 每理想续航公里电量(由充电历史校准)」估算。
-      车辆图片与「MODEL Y L」徽章来自特斯拉官方(tesla.cn 设计工作室渲染图与官方发布的尾标特写)。
-    </div>
+    <details class="footer-text"><summary>数据说明</summary>
+      数据由 TeslaMate 采集，能耗与容量来自历史样本估算。休眠或离线时显示上次上报值。
+      车辆图片与车型徽章来自特斯拉官方。
+    </details>
     <button class="icon-btn" id="theme-btn" title="切换主题">☀ 浅色</button>
   </footer>
 </div>

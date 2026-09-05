@@ -1,5 +1,8 @@
 # TESLA Home
 
+> Security upgrade: a separate `PANEL_DATABASE_PASSWORD`, admin/viewer roles and non-root runtime are now required. Read the [migration and restore guide](docs/MAINTENANCE.md) before upgrading. Existing sessions expire once. Database restore is an offline operation; port 8080 binds to loopback by default.
+
+
 [中文](README.md) | English
 
 An all-in-one self-hosted solution for Tesla vehicle data: **TeslaMate** (data collection) + **TESLA Home dashboard** (visualization), orchestrated by a single `docker compose`.

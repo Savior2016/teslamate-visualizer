@@ -10,7 +10,10 @@
   // 登录成功后回到最初想访问的页面(仅允许站内路径,防开放重定向)
   function nextTarget() {
     const next = new URLSearchParams(location.search).get('next') || '/';
-    return next.startsWith('/') && !next.startsWith('//') ? next : '/';
+    try {
+      const target = new URL(next, location.origin);
+      return target.origin === location.origin ? target.pathname + target.search + target.hash : '/';
+    } catch (_) { return '/'; }
   }
 
   form.addEventListener('submit', async (e) => {

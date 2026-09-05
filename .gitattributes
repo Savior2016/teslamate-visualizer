@@ -1,0 +1,14 @@
+* text=auto
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.py text eol=lf
+*.js text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.yml text eol=lf
+*.md text eol=lf
+*.png binary
+*.woff2 binary
+app/static/leaflet.css -text
+app/static/leaflet.js -text
+app/static/echarts.min.js -text

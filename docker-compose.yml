@@ -57,6 +57,25 @@ services:
       - mosquitto-conf:/mosquitto/config
       - mosquitto-data:/mosquitto/data
 
+  # Short-lived provisioning process; privileged credentials never enter the web container.
+  panel-db-init:
+    image: postgres:${POSTGRES_VERSION:-18-trixie}
+    restart: "no"
+    depends_on:
+      database:
+        condition: service_healthy
+      teslamate:
+        condition: service_started
+    environment:
+      PGHOST: database
+      PGUSER: teslamate
+      PGDATABASE: teslamate
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      PANEL_DATABASE_PASSWORD: ${PANEL_DATABASE_PASSWORD:?Set PANEL_DATABASE_PASSWORD}
+    volumes:
+      - ./scripts/configure-panel-db.sh:/configure-panel-db.sh:ro
+    entrypoint: ["sh", "/configure-panel-db.sh"]
+
   visualizer:
     image: ${VISUALIZER_IMAGE:-teslamate-visualizer:latest}
     build: .   # 默认从本仓库源码构建;配置了预构建镜像仓库时可注释掉本行直接 pull
@@ -65,23 +84,28 @@ services:
     depends_on:
       database:
         condition: service_healthy
+      panel-db-init:
+        condition: service_completed_successfully
     environment:
       - DATABASE_HOST=database
       - DATABASE_PORT=5432
-      - DATABASE_USER=teslamate
-      - DATABASE_PASS=${POSTGRES_PASSWORD:?请在 .env 中设置 POSTGRES_PASSWORD}
+      - DATABASE_USER=teslahome_panel
+      - DATABASE_PASS=${PANEL_DATABASE_PASSWORD:?请设置独立的 PANEL_DATABASE_PASSWORD}
       - DATABASE_NAME=teslamate
       - DISPLAY_TZ=${TZ:-Asia/Shanghai}
       # 首次启动时播种面板账号(写入 data/users.json 后不再读取;
       # 之后请到面板右上角「个人中心」修改密码或新增账号)
       - VISUALIZER_USERS=${PANEL_USERS:-}
+      - PANEL_ADMIN_USERS=${PANEL_ADMIN_USERS:-}
+      - TRUSTED_PROXY_HOSTS=caddy
+      - TRUSTED_PROXY_CIDRS=${TRUSTED_PROXY_CIDRS:-127.0.0.1/32,::1/128}
       # 车辆控制(可选):指令后端地址与令牌,详见控制分页底部「帮助」
       - CONTROL_API_URL=${CONTROL_API_URL:-}
       - CONTROL_API_TOKEN=${CONTROL_API_TOKEN:-}
       - CONTROL_VIN=${CONTROL_VIN:-}
     ports:
       # 面板主入口(自带登录认证)。配合 Caddy HTTPS 时可改 VISUALIZER_BIND=127.0.0.1
-      - "${VISUALIZER_BIND:-0.0.0.0}:8080:8080"
+      - "${VISUALIZER_BIND:-127.0.0.1}:8080:8080"
     volumes:
       # 面板用户数据:账号(users.json)、充电费用、充电桩信息、瓦片缓存
       - ./data:/data
