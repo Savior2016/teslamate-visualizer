@@ -105,3 +105,57 @@ def test_upstream_error_never_echoes_secrets(monkeypatch):
 def test_http_rejected(client,monkeypatch):
     monkeypatch.setattr(main,"_https",lambda request:False)
     assert config(client).status_code==400
+
+
+@pytest.mark.parametrize("payload, expected", [
+    ({"error": "vehicle rejected request: your public key has not been paired with the vehicle"}, "未配对当前应用公钥"),
+    ({"error": "vehicle not connected"}, "车辆未连接"),
+    ({"error": "vehicle busy or finishing wake-up"}, "车辆忙碌"),
+    ({"error_description": "no private key available"}, "未加载车辆控制私钥"),
+    ({"error": "context deadline exceeded"}, "执行结果未确认"),
+    ({"response": {"reason": "context deadline exceeded"}}, "执行结果未确认"),
+    ({"error": "client provided malformed OAuth token: SECRET_TOKEN"}, "无法解析授权令牌"),
+    ({"error": "Unauthorized missing scopes"}, "缺少所需权限"),
+    ({"error": "unknown SECRET_TOKEN", "response": []}, "代理或上游服务处理失败"),
+    (["SECRET_TOKEN"], "代理或上游服务处理失败"),
+])
+def test_command_http_500_diagnostics(monkeypatch, caplog, payload, expected):
+    import io
+    import urllib.error
+    calls = []
+    body = io.BytesIO(json.dumps(payload).encode())
+    class Opener:
+        def open(self, request, **kwargs):
+            calls.append(request)
+            raise urllib.error.HTTPError(request.full_url, 500, "error", {}, body)
+    monkeypatch.setattr(fleet.urllib.request, "build_opener", lambda *args: Opener())
+    with pytest.raises(HTTPException) as error:
+        fleet.remote("https://tesla-proxy:4443/api/1/vehicles/test-vin/command/set_sentry_mode",
+                     {"on": True}, "SECRET_TOKEN")
+    assert error.value.status_code == 502
+    assert "车辆指令服务返回 HTTP 500" in error.value.detail
+    assert expected in error.value.detail
+    assert "SECRET_TOKEN" not in error.value.detail and "test-vin" not in error.value.detail
+    assert len(calls) == 1  # No automatic replay of a possibly executed command.
+    assert calls[0].get_method() == "POST" and json.loads(calls[0].data) == {"on": True}
+    assert body.closed
+    assert expected in caplog.text
+    assert "SECRET_TOKEN" not in caplog.text and "test-vin" not in caplog.text
+
+
+@pytest.mark.parametrize("raw", [b"<html>SECRET_TOKEN</html>", b"x" * 16385, b"null"])
+def test_command_invalid_error_body(raw):
+    import io
+    import urllib.error
+    error = urllib.error.HTTPError("https://proxy/", 500, "error", {}, io.BytesIO(raw))
+    detail = fleet._remote_error_detail(error, "https://proxy/api/1/vehicles/test/command/door_lock")
+    assert "HTTP 500" in detail and "代理或上游服务处理失败" in detail
+    assert "SECRET_TOKEN" not in detail
+
+
+def test_token_http_500_identifies_auth_stage():
+    import io
+    import urllib.error
+    error = urllib.error.HTTPError("https://auth.tesla.cn/", 500, "error", {}, io.BytesIO(b'{"error":"SECRET_TOKEN"}'))
+    detail = fleet._remote_error_detail(error, "https://auth.tesla.cn/oauth2/v3/token")
+    assert "Tesla 授权服务返回 HTTP 500" in detail and "SECRET_TOKEN" not in detail

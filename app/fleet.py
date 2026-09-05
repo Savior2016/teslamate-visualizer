@@ -1,6 +1,7 @@
 """Administrator Fleet onboarding. Secrets stay encrypted in the private data volume."""
 import hashlib
 import json
+import logging
 import os
 import secrets
 import ssl
@@ -128,6 +129,44 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
+def _remote_error_detail(exc, url):
+    """Classify bounded error fields without exposing upstream text or credentials."""
+    path = urllib.parse.urlsplit(url).path
+    command = path.startswith("/api/1/vehicles/") and ("/command/" in path or path.endswith("/wake_up"))
+    stage = "车辆指令服务" if command else "Tesla 授权服务" if path.endswith("/token") else "Tesla 服务"
+    hints = {400: "检查请求参数、区域和应用权限", 401: "凭据无效或授权已过期，请重新授权",
+             403: "检查应用权限及车辆区域", 408: "车辆未在线，请在 Tesla App 唤醒后再操作",
+             409: "请求状态冲突；注册时请检查域名与公钥是否一致", 429: "请求过多，请稍后重试"}
+    hint = hints.get(exc.code, "请稍后重试")
+    if command and exc.code >= 500:
+        hint = "代理或上游服务处理失败，请检查指令服务日志中的连接、签名会话及命令错误"
+    try:
+        raw = exc.read(16385)
+        payload = json.loads(raw) if len(raw) <= 16384 else None
+        if command and isinstance(payload, dict):
+            response = payload.get("response")
+            values = [payload.get("error"), payload.get("error_description"),
+                      response.get("reason") if isinstance(response, dict) else None]
+            known = (
+                ("your public key has not been paired with the vehicle", "车辆未配对当前应用公钥，请在 Tesla App 添加此应用虚拟钥匙，并确认代理使用对应私钥"),
+                ("vehicle not connected", "车辆未连接，请在 Tesla App 确认车辆在线后再操作"),
+                ("vehicle busy or finishing wake-up", "车辆忙碌或正在唤醒，请待车辆在线后再操作"),
+                ("no private key available", "签名代理未加载车辆控制私钥，请检查代理密钥配置"),
+                ("context deadline exceeded", "车辆通信超时，指令执行结果未确认，请先在 Tesla App 核实车辆状态"),
+                ("client provided malformed oauth token", "代理无法解析授权令牌，请检查令牌及代理版本兼容性"),
+                ("unauthorized missing scopes", "授权缺少所需权限，请重新授权车辆控制权限"),
+            )
+            for marker, explanation in known:
+                if any(isinstance(value, str) and marker in value.lower() for value in values):
+                    hint = explanation
+                    break
+    except (OSError, ValueError):
+        pass
+    finally:
+        exc.close()
+    return f"{stage}返回 HTTP {exc.code}：{hint}"
+
+
 def remote(url, data=None, token=None, form=False, context=None):
     headers = {"Accept": "application/json"}
     if token:
@@ -146,9 +185,10 @@ def remote(url, data=None, token=None, form=False, context=None):
                 raise ValueError("invalid response")
             return result
     except urllib.error.HTTPError as exc:
-        # Never echo upstream bodies: they may contain tokens or authorization codes.
-        hints = {400: "检查区域、回调地址和应用权限", 401: "凭据无效或授权已过期，请重新授权", 403: "检查应用审核、权限及车辆区域", 409: "域名可能已注册，请检查公钥是否一致", 429: "请求过多，请稍后重试"}
-        raise HTTPException(502, f"Tesla 服务返回 HTTP {exc.code}：{hints.get(exc.code, '请稍后重试')}") from None
+        detail = _remote_error_detail(exc, url)
+        # Log only our fixed diagnostic vocabulary, never URLs or upstream bodies.
+        logging.getLogger(__name__).warning("%s", detail)
+        raise HTTPException(502, detail) from None
     except (OSError, ValueError):
         raise HTTPException(502, "Tesla 服务连接失败或返回无效数据，请检查配置后重试") from None
 
