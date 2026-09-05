@@ -16,9 +16,9 @@
 <p id="fleet-secret-note">密钥加密保存在服务器，不会回显，不会上传到 GitHub。</p>
 <label>当前面板登录密码<input id="fleet-password" type="password" required maxlength="1024" autocomplete="current-password" placeholder="用于确认管理员身份，不是 Tesla 密码"></label>
 <p>更换应用或地区会清除原授权状态，需要重新完成后续步骤。</p><button type="submit">保存应用信息</button></form></section>
-<section class="card"><h2>2 · 注册应用公钥 <span id="state-register"></span></h2><p id="fleet-server"></p><p>确认开发者后台已保存上面的域名和回调地址后，点击注册。服务器会使用客户端凭据向所选地区的 Tesla 服务注册公钥。</p><button id="fleet-register" type="button">注册应用</button></section>
+<section class="card"><h2>2 · 注册应用公钥 <span id="state-register"></span></h2><p id="fleet-server"></p><p>确认开发者后台已保存上面的域名和回调地址后，点击注册。服务器会使用客户端凭据向所选地区的 Tesla 服务注册公钥。</p><p id="fleet-register-hint" aria-live="polite"></p><button id="fleet-register" type="button" aria-describedby="fleet-register-hint">保存并注册应用</button></section>
 <section class="card"><h2>3 · 授权 Tesla 账号 <span id="state-authorize"></span></h2><p>点击后跳转 Tesla 官方登录页面，选择车辆并同意权限。完成后自动返回这里；请在同一个浏览器内操作，授权链接十分钟内有效。</p><button id="fleet-authorize" type="button">前往 Tesla 授权</button></section>
 <section class="card"><h2>4 · 配对虚拟钥匙 <span id="state-pair"></span></h2><p>在安装了 Tesla App 的手机上打开下面的链接，选中目标车辆并确认添加虚拟钥匙。完成后回来点击确认。</p><a id="fleet-pair" target="_blank" rel="noopener noreferrer">在 Tesla App 中添加钥匙</a><p>这里记录你的确认，无法代替 Tesla App 中的实际配对结果。</p><button id="fleet-paired" type="button">我已在 Tesla App 完成配对</button></section>
 <section class="card"><h2>5 · 开始使用</h2><p id="fleet-ready">完成前面的步骤后，返回控制页使用。首次可在车辆附近手动测试闪灯，确认钥匙生效。</p><a href="/#control">返回控制页面 →</a><p>账号授权成功后，面板会按需自动续期；授权被撤销或刷新令牌失效时，需要重新授权。此流程用于车辆控制，TeslaMate 的数据采集授权保持独立。</p></section>
 <details class="card"><summary>断开当前接入</summary><p>清除服务器保存的客户端凭据和令牌，保留公钥和签名私钥。如果服务器仍配置了旧托管后端，清除后会恢复使用该后端。如需彻底撤销权限，请同时在 Tesla 账号中撤销应用授权，并在车辆中移除虚拟钥匙。</p><form id="fleet-disconnect-form"><label>当前面板登录密码<input id="fleet-disconnect-password" type="password" required autocomplete="current-password"></label><button type="submit">清除接入配置</button></form></details>
-</div></main><script src="/fleet.js"></script></body></html>
+</div></main><script src="/fleet.js?v=2"></script></body></html>
