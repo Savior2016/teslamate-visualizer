@@ -2292,6 +2292,7 @@
   function switchTab(name, save) {
     if (!PAGE_IDS.includes(name)) name = 'overview';
     if (save !== false) localStorage.setItem('ttv-tab', name);
+    window.scrollTo(0, 0);  // 切换分页后回到页面顶部
     document.querySelectorAll('.page').forEach((p) =>
       p.classList.toggle('active', p.id === 'page-' + name));
     document.querySelectorAll('.tabbar .tab').forEach((t) => {
