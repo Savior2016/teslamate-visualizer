@@ -7,6 +7,7 @@
   <title>TESLA Home</title>
   <link rel="stylesheet" href="/leaflet.css">
   <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/control.css?v=1">
 </head>
 <body>
 <div class="wrap">
@@ -374,9 +375,9 @@
         <span class="ctl-setup-icon">🔑</span>
         <div class="ctl-setup-text">
           <b>控制功能尚未接入</b>,以下为控制面板预览,按钮暂不可用。<br>
-          完成注册与虚拟钥匙配对、在 .env 填入后端地址与令牌后重启即可启用。
+          在个人中心完成应用配置、账号授权和虚拟钥匙配对后即可使用。
         </div>
-        <a class="ctl-setup-link" href="/guide.html">查看帮助</a>
+        <a class="ctl-setup-link" href="/account.html#control-settings-entry">前往个人中心配置</a>
       </div>
 
       <div id="ctl-main" hidden>
@@ -452,6 +453,8 @@
                 <path class="zone-ico zone-ico-stroke" transform="translate(157 262) scale(1.1)" d="M12 2v20M3.3 7l17.4 10M20.7 7 3.3 17M9 4.5 12 7l3-2.5M9 19.5 12 17l3 2.5"/>
                 <text class="zone-lab" id="ctlz-climate-lab" x="170" y="308">空调</text>
               </g>
+              <text id="ctl-model-temp" x="170" y="235" text-anchor="middle" pointer-events="none">—</text>
+              <text id="ctl-model-inside" x="170" y="337" text-anchor="middle" pointer-events="none">车内 —</text>
               <!-- 充电口(左后翼子板,真实车充电口位置) -->
               <g class="ctl-zone" data-zone="chargeport" role="button" tabindex="0" style="--zc:var(--cat-charge)">
                 <title>充电口:点击 开/关</title>
@@ -477,45 +480,17 @@
             <p class="ctl-legend-hint">车头盖 = 前备箱 · 前风挡 = 哨兵 · 左右灯角 = 闪灯/鸣笛 · 左门 = 车锁 · 右窗 = 车窗 · 玻璃顶 = 空调 · 左后翼子板 = 充电口 · 车尾 = 后备箱</p>
           </div>
 
-          <!-- 参数面板:温度 / 充电 / 爆闪 -->
-          <div class="ctl-panels">
-            <div class="ctl-group">
-              <h3>空调温度</h3>
-              <div class="ctl-row">
-                <button class="ctl-step" id="ctl-temp-minus" aria-label="降温">−</button>
-                <b class="ctl-val" id="ctl-temp-val">21.5°C</b>
-                <button class="ctl-step" id="ctl-temp-plus" aria-label="升温">+</button>
-                <button class="ctl-apply" data-cmd="set_temps" data-args-src="temp">应用到车辆</button>
-              </div>
-            </div>
-
-            <div class="ctl-group">
-              <h3>充电</h3>
-              <button class="ctl-wide" id="ctl-charge-toggle" data-zone-cmd="charge">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg>
-                <span id="ctl-charge-toggle-lab">开始充电</span>
-              </button>
-              <div class="ctl-row">
-                <span class="ctl-row-label">充电上限</span>
-                <input type="range" id="ctl-limit" min="50" max="100" step="5" value="80">
-                <b class="ctl-val" id="ctl-limit-val">80%</b>
-                <button class="ctl-apply" data-cmd="set_charge_limit" data-args-src="limit">设置</button>
-              </div>
-            </div>
-
-            <div class="ctl-group">
-              <h3>车灯爆闪</h3>
-              <div class="ctl-row">
-                <button class="ctl-mini" data-cmd="flash_strobe" data-args="{&quot;seconds&quot;:10}" data-confirm="将连续闪灯 10 秒(约每秒 1 次),确认?">10 秒</button>
-                <button class="ctl-mini" data-cmd="flash_strobe" data-args="{&quot;seconds&quot;:30}" data-confirm="将连续闪灯 30 秒(约每秒 1 次),确认?">30 秒</button>
-                <button class="ctl-mini" data-cmd="flash_strobe" data-args="{&quot;seconds&quot;:60}" data-confirm="将连续闪灯 60 秒(约每秒 1 次),确认?">60 秒</button>
-                <button class="ctl-mini warn" data-cmd="flash_strobe_stop">停止</button>
-              </div>
-              <p class="ctl-sub-note">官方 flash_lights 指令每次只闪一下,爆闪为面板循环调用;频率受云端往返限制,约 0.5–1 次/秒</p>
-            </div>
+          <div class="ctl-modules" aria-label="车辆控制模块">
+            <button class="ctl-module" data-panel="climate"><span>空调温度</span><b id="ctl-module-climate">查看与调节</b></button>
+            <button class="ctl-module" data-panel="charge"><span>充电控制</span><b id="ctl-module-charge">启停与上限</b></button>
+            <button class="ctl-module" data-panel="lights"><span>车灯与鸣笛</span><b id="ctl-module-lights">闪灯 / 连续闪灯</b></button>
+            <button class="ctl-module" data-panel="nap"><span>午休模式</span><b id="ctl-module-nap">定时露营</b></button>
           </div>
         </div>
-        <p class="ctl-note">休眠中的车辆会先被唤醒,首条指令可能需要 10–30 秒;唤醒与指令按 Tesla 计费(个人额度内免费)。车锁 / 哨兵 / 车窗状态为面板按最近指令推测(TeslaMate 不上报这几项),空调与充电状态为车辆实际上报。</p>
+        <p class="ctl-note" id="ctl-live-note" role="status">点击刷新读取车辆当前状态；未上报的项目显示未知。</p>
+        <button class="ctl-mini" id="ctl-refresh">刷新车辆状态</button>
+        <p class="ctl-note" id="ctl-operation-message" role="status" aria-live="polite"></p>
+
       </div>
 
       <!-- 底部帮助入口 -->
@@ -528,6 +503,11 @@
     </div>
   </div>
   </section>
+
+  <dialog id="ctl-dialog" aria-labelledby="ctl-dialog-title">
+    <div class="ctl-dialog-head"><h2 id="ctl-dialog-title"></h2><button id="ctl-dialog-close" aria-label="关闭操作窗口">×</button></div>
+    <p id="ctl-dialog-state"></p><div id="ctl-dialog-body"></div><p id="ctl-dialog-message" role="status" aria-live="polite"></p>
+  </dialog>
 
   <div class="filter-row">
     <div class="seg" id="range-seg" role="group" aria-label="时间范围">
@@ -592,6 +572,7 @@
 
 <script src="/echarts.min.js"></script>
 <script src="/leaflet.js"></script>
+<script src="/control.js?v=1"></script>
 <script src="/app.js"></script>
 </body>
 </html>

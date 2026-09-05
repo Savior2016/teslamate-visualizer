@@ -21,6 +21,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+import urllib.parse
 from collections import defaultdict
 
 from fastapi import APIRouter, HTTPException, Request
@@ -48,6 +49,7 @@ _CMDS = {
     "honk_horn": {},
     "flash_lights": {},
     "sentry_mode": {"on": bool},
+    "set_sentry_mode": {"on": bool},
     "auto_conditioning_start": {},
     "auto_conditioning_stop": {},
     "set_temps": {"driver_temp": (15.0, 30.0)},
@@ -100,7 +102,7 @@ def _state_patch(cmd: str, args: dict) -> dict | None:
         return {"locked": True}
     if cmd == "door_unlock":
         return {"locked": False}
-    if cmd == "sentry_mode":
+    if cmd in ("sentry_mode", "set_sentry_mode"):
         return {"sentry": bool(args.get("on"))}
     if cmd == "window_control":
         return {"windows_open": args.get("command") == "vent"}
@@ -135,15 +137,94 @@ def _live_states() -> dict:
     return out
 
 
-def _states() -> dict:
-    live: dict = {}
+_snapshot_lock = threading.Lock()
+_snapshot = {}
+_snapshot_vin = ""
+_snapshot_checked = 0.0
+_snapshot_error = ""
+CURRENT_FIELDS = ("locked", "sentry", "windows_open", "charge_port", "frunk_open", "trunk_open", "climate_on", "climate_temp", "inside_temp", "charging", "cable", "charge_limit", "camp_mode")
+
+
+def _fresh(section):
+    stamp = section.get("timestamp")
+    return isinstance(stamp, (int, float)) and -30 <= time.time() - stamp / 1000 <= 120
+
+
+def normalize_vehicle(payload):
+    """Keep only display fields. Never persist VIN, coordinates, tokens or raw responses."""
+    result = {k: None for k in CURRENT_FIELDS}
+    stamps = []
+    vs, cs, ch = (payload.get(k) or {} for k in ("vehicle_state", "climate_state", "charge_state"))
+    boolean = lambda x: x if type(x) is bool else None
+    opened = lambda x: x != 0 if type(x) in (int, float) else None
+    if _fresh(vs):
+        stamps.append(vs["timestamp"])
+        result.update(locked=boolean(vs.get("locked")), sentry=boolean(vs.get("sentry_mode")),
+                      frunk_open=opened(vs.get("ft")), trunk_open=opened(vs.get("rt")))
+        windows = [vs.get(k) for k in ("fd_window", "fp_window", "rd_window", "rp_window")]
+        if all(type(v) in (int, float) for v in windows):
+            result["windows_open"] = any(v != 0 for v in windows)
+    if _fresh(cs):
+        stamps.append(cs["timestamp"])
+        mode = cs.get("climate_keeper_mode")
+        result.update(climate_on=boolean(cs.get("is_climate_on")), climate_temp=cs.get("driver_temp_setting"), inside_temp=cs.get("inside_temp"))
+        result["camp_mode"] = (mode == 3 or str(mode).lower() == "camp") if mode in (0, 1, 2, 3, "off", "on", "dog", "camp", "Off", "On", "Dog", "Camp") else None
+    if _fresh(ch):
+        stamps.append(ch["timestamp"])
+        state = ch.get("charging_state")
+        result.update(charge_port=boolean(ch.get("charge_port_door_open")), charge_limit=ch.get("charge_limit_soc"))
+        if state in ("Charging", "Complete", "Stopped", "Starting", "Disconnected", "NoPower"):
+            result["charging"] = state == "Charging"
+            result["cable"] = state != "Disconnected"
+    result["reported_at"] = min(stamps) if stamps else None
+    result["source"] = "fleet" if stamps else "unknown"
+    return result
+
+
+def vehicle_data(vin):
+    from . import fleet
+    if fleet.configured():
+        return fleet.vehicle_data(vin)
+    if not (CONTROL_API_URL and CONTROL_API_TOKEN):
+        raise HTTPException(409, "请先在个人中心完成控制配置")
+    url = CONTROL_API_URL + "/api/1/vehicles/" + urllib.parse.quote(vin, safe="") + "/vehicle_data?endpoints=vehicle_state%3Bclimate_state%3Bcharge_state"
+    return fleet.remote(url, token=CONTROL_API_TOKEN).get("response") or {}
+
+
+def _states():
+    with _snapshot_lock:
+        state = dict(_snapshot)
+    if state.get("reported_at") and time.time() * 1000 - state["reported_at"] <= 120000:
+        return state
+    out = {k: None for k in CURRENT_FIELDS}
     try:
         live = _live_states()
-    except Exception:  # noqa: BLE001 — 数据库异常时退回纯乐观状态
+        # Only recent TeslaMate climate/charge fields can supplement unknown Fleet data.
+        if live.get("reported_at") and time.time() * 1000 - live["reported_at"] <= 120000:
+            out.update(live)
+            out["source"] = "teslamate"
+    except Exception:
         pass
-    # 乐观推测垫底(覆盖 locked/sentry/windows_open/charge_port),
-    # 实时上报项(climate_on/charging/cable)以车辆为准
-    return {**_optimistic(), **live}
+    out.setdefault("source", "unknown")
+    return out
+
+
+@router.post("/api/control/refresh")
+def refresh_vehicle(request: Request):
+    global _snapshot, _snapshot_checked, _snapshot_vin, _snapshot_error
+    _m().require_admin(request)
+    vin = _vin()
+    with _snapshot_lock:
+        if vin == _snapshot_vin and time.time() - _snapshot_checked < 10:
+            return {"ok": not bool(_snapshot_error), "states": dict(_snapshot), "detail": _snapshot_error}
+        _snapshot_checked, _snapshot_vin = time.time(), vin
+        try:
+            _snapshot = normalize_vehicle(vehicle_data(vin))
+            _snapshot_error = "" if _snapshot.get("reported_at") else "车辆未返回新鲜状态，请确认车辆在线后重试"
+        except HTTPException as e:
+            _snapshot = {k: None for k in CURRENT_FIELDS}
+            _snapshot_error = e.detail
+        return {"ok": not bool(_snapshot_error), "states": dict(_snapshot), "detail": _snapshot_error}
 
 
 class CommandIn(BaseModel):
@@ -200,32 +281,20 @@ def _validate_args(cmd: str, args: dict) -> dict:
     return out
 
 
-def _forward(cmd: str, args: dict) -> dict:
+def _forward(cmd: str, args: dict, vin: str | None = None) -> dict:
     """向指令后端转发一条指令,返回 {ok, reason}。"""
     from . import fleet
+    vin = vin or _vin()
+    cmd = "set_sentry_mode" if cmd == "sentry_mode" else cmd
     if fleet.configured():
-        return fleet.forward(_vin(), cmd, args)
+        return fleet.forward(vin, cmd, args)
     suffix = "wake_up" if cmd == "wake_up" else "command/" + cmd
-    url = f"{CONTROL_API_URL}/api/1/vehicles/{_vin()}/{suffix}"
-    req = urllib.request.Request(
-        url,
-        data=json.dumps(args).encode("utf-8"),
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {CONTROL_API_TOKEN}",
-        },
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=25) as resp:
-            payload = json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        detail = e.read().decode("utf-8", "replace")[:200]
-        raise HTTPException(status_code=502, detail=f"指令后端返回 HTTP {e.code}:{detail}")
-    except (urllib.error.URLError, TimeoutError, ValueError) as e:
-        raise HTTPException(status_code=502, detail=f"无法连接指令后端:{e}")
-    result = (payload.get("response") or {})
-    return {"ok": bool(result.get("result")), "reason": result.get("reason") or ""}
+    url = f"{CONTROL_API_URL}/api/1/vehicles/{urllib.parse.quote(vin, safe="")}/{suffix}"
+    payload = fleet.remote(url, args, CONTROL_API_TOKEN)
+    result = payload.get("response") or {}
+    if cmd == "wake_up":
+        return {"ok": result.get("state") == "online", "reason": "" if result.get("state") == "online" else "唤醒已请求，请稍后确认"}
+    return {"ok": bool(result.get("result")), "reason": str(result.get("reason") or "")[:200]}
 
 
 def _strobe_loop() -> None:
@@ -268,9 +337,11 @@ def _strobe_cancel() -> dict:
 
 
 @router.get("/api/control/status")
-def control_status():
+def control_status(request: Request):
     """控制功能是否已配置指令后端(不泄露令牌,只回域名与 VIN 后 6 位)+ 车辆状态。"""
-    base = {"configured": False, "strobe_active": _strobe_active(), "states": _states()}
+    from . import fleet, nap
+    saved = fleet.read()
+    base = {"configured": False, "role": request.state.role, "ever_configured": bool(saved.get("client_id") or (CONTROL_API_URL and CONTROL_API_TOKEN)), "strobe_active": _strobe_active(), "states": _states(), "nap": nap.status()}
     from . import fleet
     if not (fleet.configured() or (CONTROL_API_URL and CONTROL_API_TOKEN)):
         return base
@@ -290,7 +361,7 @@ def send_command(body: CommandIn, request: Request):
     _m().require_admin(request)
     from . import fleet
     if not (fleet.configured() or (CONTROL_API_URL and CONTROL_API_TOKEN)):
-        raise HTTPException(status_code=503, detail="控制功能未配置,请先在 .env 设置 CONTROL_API_URL / CONTROL_API_TOKEN")
+        raise HTTPException(status_code=503, detail="请先在个人中心完成车辆控制配置")
     # 爆闪为本地面板功能(循环 flash_lights),不直接转发;计 1 次节流
     if body.cmd in ("flash_strobe", "flash_strobe_stop"):
         pass

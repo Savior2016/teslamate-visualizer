@@ -196,6 +196,15 @@ def forward(vin, cmd, args):
     return {"ok": bool(result.get("result")), "reason": str(result.get("reason") or "")[:200]}
 
 
+def vehicle_data(vin):
+    with _lock:
+        d = read()
+        access = token(d)
+        audience = REGIONS[d["region"]][0]
+    path = "/api/1/vehicles/" + urllib.parse.quote(vin, safe="") + "/vehicle_data?endpoints=vehicle_state%3Bclimate_state%3Bcharge_state"
+    return remote(audience + path, token=access).get("response") or {}
+
+
 class Credentials(BaseModel):
     client_id: str = Field(min_length=1, max_length=256)
     client_secret: str = Field(default="", max_length=2048)
@@ -225,7 +234,9 @@ def status(request: Request):
 def configure(body: Credentials, request: Request):
     reauth(request, body.password)
     origin()
-    with _lock:
+    from . import nap
+    with nap.lock, _lock:
+        nap.ensure_idle()
         old = read()
         client_id = body.client_id.strip()
         secret = body.client_secret.strip() or (old.get("client_secret", "") if old.get("client_id") == client_id and old.get("region") == body.region else "")
@@ -263,7 +274,9 @@ def authorize(request: Request):
     session = request.cookies.get(main.SESSION_COOKIE, "")
     if not session:
         raise HTTPException(409, "请在浏览器中登录面板后开始授权")
-    with _lock:
+    from . import nap
+    with nap.lock, _lock:
+        nap.ensure_idle()
         d = read()
         if not d.get("registered"):
             raise HTTPException(409, "请先完成应用信息、服务器公钥和注册步骤")
@@ -278,7 +291,9 @@ def authorize(request: Request):
 def callback(request: Request):
     from . import main
     admin(request)
-    with _lock:
+    from . import nap
+    with nap.lock, _lock:
+        nap.ensure_idle()
         d = read()
         pending = d.get("pending", {})
         state = request.query_params.get("state", "")
@@ -299,7 +314,7 @@ def callback(request: Request):
                     outcome = "success"
                 except HTTPException:
                     outcome = "failed"
-    response = RedirectResponse("/?fleet=" + outcome, status_code=303)
+    response = RedirectResponse("/fleet.html?fleet=" + outcome, status_code=303)
     response.headers["Cache-Control"] = "no-store"
     return response
 
@@ -319,6 +334,8 @@ def paired(request: Request):
 @router.post("/api/fleet/disconnect")
 def disconnect(body: Password, request: Request):
     reauth(request, body.password)
-    with _lock:
+    from . import nap
+    with nap.lock, _lock:
+        nap.ensure_idle()
         write({})
     return {"ok": True}

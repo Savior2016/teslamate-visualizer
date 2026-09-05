@@ -56,6 +56,7 @@
   }
 
   function renderStatus(s) {
+    $('control-settings-entry').style.display = s.role === 'admin' ? '' : 'none';
     $('acct-user-name').textContent = s.user || '—';
 
     const banner = $('tesla-banner');

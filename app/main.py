@@ -272,8 +272,13 @@ async def lifespan(_: FastAPI):
         conn.execute("SELECT 1 FROM panel_manual LIMIT 1")
         _migrate_manual_files(conn)
         conn.commit()
-    yield
-    pool.close()
+    from . import nap
+    nap.start_worker()
+    try:
+        yield
+    finally:
+        nap.stop_worker()
+        pool.close()
 
 
 app = FastAPI(title="TeslaMate Telemetry Visualizer", lifespan=lifespan)
@@ -1633,6 +1638,8 @@ app.include_router(backup_router)   # 须在 app.mount("/") 之前注册
 from .fleet import router as fleet_router
 app.include_router(fleet_router)
 app.include_router(control_router)
+from .nap import router as nap_router
+app.include_router(nap_router)
 app.include_router(parking_router)
 app.include_router(vehicle_router)
 
