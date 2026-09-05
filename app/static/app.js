@@ -2146,7 +2146,7 @@
       rs.forEach((r) => {
         const row = el('div', 'rt-row');
         row.appendChild(el('span', 'rt-time', fmtClock(Number(r.start_date_ts))));
-        row.appendChild(el('span', 'rt-names', `${escapeHTML(r.start_name || '—')} → ${escapeHTML(r.end_name || '—')}`));
+        row.appendChild(el('span', 'rt-names', `${r.start_name || '—'} → ${r.end_name || '—'}`));
         row.appendChild(el('span', 'rt-dist', `${fmtNum(r.distance, 1)} km`));
         row.appendChild(el('span', 'rt-dur', `${fmtNum(r.duration_min, 0)} 分`));
         row.appendChild(el('span', 'chev rt-chev', '▾'));
