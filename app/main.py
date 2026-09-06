@@ -62,6 +62,9 @@ _session_user = accounts.session_user
 SESSION_COOKIE = "ttv_session"
 TRUSTED_PROXIES = tuple(ip_network(x.strip()) for x in
                         os.environ.get("TRUSTED_PROXY_CIDRS", "127.0.0.1/32,::1/128").split(",") if x.strip())
+# 设备证书免密:Caddy 验证客户端证书后回源携带 X-Device-Trust 共享头(见 Caddyfile);
+# 空值关闭该通道。仅信任来自可信代理的请求,客户端直连伪造的头在 Caddy 层已被剥除。
+DEVICE_TRUST_TOKEN = os.environ.get("DEVICE_TRUST_TOKEN", "")
 _failures = {}
 _failure_lock = threading.Lock()
 FAIL_WINDOW, FAIL_THRESHOLD, LOCKOUT = 600, 10, 300
@@ -272,12 +275,14 @@ async def lifespan(_: FastAPI):
         conn.execute("SELECT 1 FROM panel_manual LIMIT 1")
         _migrate_manual_files(conn)
         conn.commit()
-    from . import nap
+    from . import nap, sentry_sched
     nap.start_worker()
+    sentry_sched.start_worker()
     try:
         yield
     finally:
         nap.stop_worker()
+        sentry_sched.stop_worker()
         pool.close()
 
 
@@ -331,8 +336,11 @@ async def auth_and_headers(request: Request, call_next):
         if not public:
             users = auth_users()  # raises on missing, corrupt or empty configuration
             user = ""
+            if (DEVICE_TRUST_TOKEN and _trusted_proxy(request) and
+                    hmac.compare_digest(request.headers.get("x-device-trust", ""), DEVICE_TRUST_TOKEN)):
+                user = next((u for u, r in accounts.roles().items() if r == "admin"), "")
             token = request.cookies.get(SESSION_COOKIE, "")
-            if token:
+            if not user and token:
                 user = _session_user(token)
             header = request.headers.get("Authorization", "")
             if not user and header.startswith("Basic "):
@@ -1504,6 +1512,17 @@ class UserAdd(BaseModel):
     role: str = "viewer"
 
 
+@app.get("/api/device/cert")
+def device_cert(request: Request):
+    """下载 iPhone 免密设备证书(p12),仅管理员。证书由 scripts/make-device-cert.sh 生成;
+    导出密码存 data/pki/EXPORT_PASSWORD.txt。吊销/换机:重跑该脚本 --new-ca 并重建 caddy。"""
+    require_admin(request)
+    p12 = "/data/pki/iphone.p12"
+    if not os.path.exists(p12):
+        raise HTTPException(status_code=404, detail="设备证书未生成:请先在服务器上运行 scripts/make-device-cert.sh")
+    return FileResponse(p12, media_type="application/x-pkcs12", filename="iphone.p12")
+
+
 @app.get("/api/account/status")
 def account_status(request: Request):
     """个人中心:当前账号、账号列表、Tesla 授权/车辆/数据同步状态(指引步骤亮灯用)。
@@ -1640,6 +1659,8 @@ app.include_router(fleet_router)
 app.include_router(control_router)
 from .nap import router as nap_router
 app.include_router(nap_router)
+from .sentry_sched import router as sentry_sched_router
+app.include_router(sentry_sched_router)
 app.include_router(parking_router)
 app.include_router(vehicle_router)
 

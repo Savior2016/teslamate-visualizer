@@ -165,6 +165,7 @@
     $('ctl-module-lights').textContent=model.strobe_active?'连续闪灯中':'闪灯 / 鸣笛';
     $('ctl-live-note').textContent=s.reported_at?`${s.source==='fleet'?'车辆状态':'TeslaMate 上报'} · ${new Date(s.reported_at).toLocaleTimeString('zh-CN')}`:'点击刷新读取车辆当前状态。';
     $('ctl-refresh').disabled=busy||!canWrite();
+    $('ctl-audit').disabled=model.role!=='admin';
     $('ctl-state').textContent=model.role==='viewer'?'只读账号：可以查看状态，不能操作车辆。':vehicle.state?`车辆：${({online:'在线',asleep:'休眠',offline:'离线',driving:'行驶中',charging:'充电中'})[vehicle.state]||vehicle.state}`:'';
     renderNap();
   }
@@ -262,6 +263,7 @@
       };
       const spec=specs[name];if(!spec)return;
       slideRow(spec.label,'',s[spec.key]===true,flipCmd(spec.on,spec.off),spec.icon,spec.color,spec.labels);
+      if(name==='sentry')renderSchedule();
     }
     if(!dialog.open)dialog.showModal();
   }
@@ -306,6 +308,91 @@
     catch(e){message(e.message,true);return cur;}
     finally{busy=false;await load();}
   }
+  /* 定时哨兵:多个每日时段,到点自动开/关;整表提交保存 */
+  let sentrySlots=[];
+  async function saveSlots(slots){
+    await api('sentry-schedule',{slots:slots.map(s=>({start:s.start,end:s.end,enabled:s.enabled!==false}))});
+  }
+  function renderSchedule(){
+    const wrap=document.createElement('div');wrap.className='ctl-sched';
+    const head=document.createElement('p');head.className='ctl-tip';head.textContent='定时哨兵:可添加多个时段(支持跨夜,如 22:00 – 07:00),进入时段自动开启、离开时段自动关闭。';wrap.appendChild(head);
+    const list=document.createElement('div');list.className='ctl-sched-list';wrap.appendChild(list);
+    function redraw(){
+      list.textContent='';
+      if(!sentrySlots.length){
+        const empty=document.createElement('p');empty.className='ctl-tip';empty.textContent='暂无时段。';list.appendChild(empty);
+      }
+      sentrySlots.forEach(slot=>{
+        const row=document.createElement('div');row.className='ctl-sched-row';
+        const tgl=document.createElement('button');tgl.type='button';tgl.className='ctl-sched-toggle'+(slot.enabled!==false?' on':'');tgl.textContent=slot.enabled!==false?'已启用':'已停用';tgl.disabled=!canWrite();
+        const txt=document.createElement('span');txt.textContent=`${slot.start} – ${slot.end}`;
+        const del=document.createElement('button');del.type='button';del.textContent='删除';del.disabled=!canWrite();
+        tgl.addEventListener('click',async()=>{
+          const prev=slot.enabled!==false;slot.enabled=!prev;
+          try{await saveSlots(sentrySlots);}catch(e){slot.enabled=prev;message(e.message,true);}
+          redraw();
+        });
+        del.addEventListener('click',async()=>{
+          const keep=sentrySlots;sentrySlots=sentrySlots.filter(x=>x!==slot);
+          try{await saveSlots(sentrySlots);}catch(e){sentrySlots=keep;message(e.message,true);}
+          redraw();
+        });
+        row.append(tgl,txt,del);list.appendChild(row);
+      });
+    }
+    const add=document.createElement('div');add.className='ctl-sched-add';
+    const a=document.createElement('input');a.type='time';a.value='22:00';a.setAttribute('aria-label','开始时间');
+    const b=document.createElement('input');b.type='time';b.value='07:00';b.setAttribute('aria-label','结束时间');
+    const plus=document.createElement('button');plus.type='button';plus.textContent='添加时段';plus.disabled=!canWrite();
+    plus.addEventListener('click',async()=>{
+      if(!guardWrite())return;
+      if(!a.value||!b.value)return;
+      if(a.value===b.value){message('开始与结束时间不能相同',true);return;}
+      if(sentrySlots.length>=10){message('最多 10 个时段',true);return;}
+      sentrySlots=[...sentrySlots,{start:a.value,end:b.value,enabled:true}];
+      try{await saveSlots(sentrySlots);message('时段已保存');}
+      catch(e){sentrySlots=sentrySlots.slice(0,-1);message(e.message,true);}
+      redraw();
+    });
+    add.append(a,b,plus);wrap.appendChild(add);
+    $('ctl-dialog-body').appendChild(wrap);
+    redraw();
+    api('sentry-schedule').then(d=>{sentrySlots=d.slots||[];redraw();}).catch(()=>{});
+  }
+  /* 控制审计:指令下发记录弹窗 */
+  const auditDlg=$('ctl-audit-dialog');
+  const CMD_NAMES={wake_up:'唤醒车辆',door_lock:'锁车',door_unlock:'解锁',honk_horn:'鸣笛',flash_lights:'闪灯一次',flash_strobe:'连续闪灯',flash_strobe_stop:'停止闪灯',sentry_mode:'哨兵模式',set_sentry_mode:'哨兵模式',auto_conditioning_start:'开启空调',auto_conditioning_stop:'关闭空调',set_temps:'设定温度',charge_start:'开始充电',charge_stop:'停止充电',charge_port_door_open:'打开充电口',charge_port_door_close:'关闭充电口',set_charge_limit:'设置充电上限',window_control:'车窗控制',actuate_trunk:'开合前/后备箱'};
+  function auditArgs(e){
+    const a=e.args||{};
+    if(e.cmd==='set_sentry_mode'||e.cmd==='sentry_mode')return a.on?'（开启）':'（关闭）';
+    if(e.cmd==='set_temps')return `（${a.driver_temp}°C）`;
+    if(e.cmd==='set_charge_limit')return `（${a.percent}%）`;
+    if(e.cmd==='window_control')return a.command==='vent'?'（通风）':'（关闭）';
+    if(e.cmd==='actuate_trunk')return a.which_trunk==='front'?'（前备箱）':'（后备箱）';
+    if(e.cmd==='flash_strobe')return `（${a.seconds||''} 秒）`;
+    return '';
+  }
+  async function openAudit(){
+    if(model.role!=='admin'){message('只读账号：无权查看控制审计。',true);return;}
+    const body=$('ctl-audit-body');body.textContent='正在读取记录…';
+    if(!auditDlg.open)auditDlg.showModal();
+    try{
+      const data=await api('audit');
+      body.textContent='';
+      if(!data.entries||!data.entries.length){body.textContent='暂无记录。';return;}
+      data.entries.forEach(e=>{
+        const row=document.createElement('div');row.className='ctl-audit-row'+(e.ok?'':' fail');
+        const when=document.createElement('time');when.textContent=new Date(e.at*1000).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
+        const what=document.createElement('span');what.className='ctl-audit-what';
+        what.textContent=`${e.user} · ${CMD_NAMES[e.cmd]||e.cmd}${auditArgs(e)}${e.woke?'（先唤醒车辆）':''}`;
+        const st=document.createElement('b');st.textContent=e.ok?'已接受':(e.reason||'未接受');
+        row.append(when,what,st);body.appendChild(row);
+      });
+    }catch(e){body.textContent=e.message;}
+  }
+  $('ctl-audit').addEventListener('click',openAudit);
+  $('ctl-audit-close').addEventListener('click',()=>auditDlg.close());
+  auditDlg.addEventListener('click',e=>{if(e.target===auditDlg)auditDlg.close();});
   $('ctl-refresh').addEventListener('click',refresh);
   Object.keys(TILE_META).forEach(name=>{
     const tile=document.querySelector(`.ctl-module[data-panel="${name}"]`);if(!tile)return;

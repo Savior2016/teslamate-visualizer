@@ -7,7 +7,7 @@
   <title>TESLA Home</title>
   <link rel="stylesheet" href="/leaflet.css">
   <link rel="stylesheet" href="/style.css">
-  <link rel="stylesheet" href="/control.css?v=5">
+  <link rel="stylesheet" href="/control.css?v=6">
 </head>
 <body>
 <div class="wrap">
@@ -514,7 +514,10 @@
           </div>
         </div>
         <p class="ctl-note" id="ctl-live-note" role="status">点击刷新读取车辆当前状态。</p>
-        <button class="ctl-mini" id="ctl-refresh">刷新车辆状态</button>
+        <div class="ctl-foot-actions">
+          <button class="ctl-btn" id="ctl-refresh" type="button">刷新车辆状态</button>
+          <button class="ctl-btn" id="ctl-audit" type="button">控制审计</button>
+        </div>
         <p class="ctl-note" id="ctl-operation-message" role="status" aria-live="polite"></p>
 
       </div>
@@ -533,6 +536,13 @@
   <dialog id="ctl-dialog" aria-labelledby="ctl-dialog-title">
     <div class="ctl-dialog-head"><h2 id="ctl-dialog-title"></h2><button id="ctl-dialog-close" class="ctl-dialog-close" aria-label="关闭操作窗口"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.3 5.7 16.9 4.3 12 9.2 7.1 4.3 5.7 5.7 10.6 12l-4.9 4.9 1.4 1.4 4.9-4.9 4.9 4.9 1.4-1.4-4.9-4.9z"/></svg></button></div>
     <p id="ctl-dialog-state"></p><div id="ctl-dialog-body"></div><p id="ctl-dialog-message" role="status" aria-live="polite"></p>
+  </dialog>
+
+  <!-- 控制审计:每次指令下发记录(含定时哨兵自动执行) -->
+  <dialog id="ctl-audit-dialog" aria-labelledby="ctl-audit-title">
+    <div class="ctl-dialog-head"><h2 id="ctl-audit-title">控制审计</h2><button id="ctl-audit-close" class="ctl-dialog-close" aria-label="关闭审计窗口"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.3 5.7 16.9 4.3 12 9.2 7.1 4.3 5.7 5.7 10.6 12l-4.9 4.9 1.4 1.4 4.9-4.9 4.9 4.9 1.4-1.4-4.9-4.9z"/></svg></button></div>
+    <p class="ctl-tip">每次控制指令的下发记录(含定时哨兵自动执行),保留最近 500 条。</p>
+    <div id="ctl-audit-body" class="ctl-audit-list"></div>
   </dialog>
 
   <!-- 二次确认弹窗:仅前/后备箱等风险操作 -->
@@ -611,7 +621,7 @@
 
 <script src="/echarts.min.js"></script>
 <script src="/leaflet.js"></script>
-<script src="/control.js?v=5"></script>
+<script src="/control.js?v=6"></script>
 <script src="/app.js"></script>
 </body>
 </html>

@@ -5,5 +5,26 @@ tesla.example.com {
 	@scan path /.env* /.git* /.aws* /.stripe* /aws-ses.json /wp-* /xmlrpc.php /jsonrpc
 	abort @scan
 
-	reverse_proxy visualizer:8080
+	# 可选:设备证书免密(指定 iPhone 免输密码,其他设备照常密码登录)。
+	# 1) 运行 ./scripts/make-device-cert.sh 生成 data/pki/(CA + iphone.p12)
+	# 2) 在 .env 设置 DEVICE_TRUST_TOKEN=<随机48位hex>,把下面 header_up 的值改成同值
+	# 3) compose 会给 caddy 挂载 ./data/pki:/pki:ro;重建 caddy 后,在 iPhone 上
+	#    先用密码登录面板,访问 /api/device/cert 下载 p12 并安装,之后免密
+	# tls {
+	# 	client_auth {
+	# 		mode verify_if_given
+	# 		trust_pool file {
+	# 			pem_file /pki/device-ca.crt
+	# 		}
+	# 	}
+	# }
+	# @trusted expression {http.request.tls.client.subject} != ''
+	# reverse_proxy @trusted visualizer:8080 {
+	# 	header_up X-Device-Trust "<与 .env 的 DEVICE_TRUST_TOKEN 同值>"
+	# }
+
+	reverse_proxy visualizer:8080 {
+		# 无证书连接:剥掉客户端可能伪造的信任头(启用上面的免密块后,整段替换为只保留本行)
+		header_up -X-Device-Trust
+	}
 }

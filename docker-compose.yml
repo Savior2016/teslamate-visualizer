@@ -105,8 +105,12 @@ services:
       - CONTROL_VIN=${CONTROL_VIN:-}
       - FLEET_PUBLIC_ORIGIN=${FLEET_PUBLIC_ORIGIN:-}
       - FLEET_PROXY_URL=https://tesla-proxy:4443
+      # 设备证书免密:与 Caddyfile 里 X-Device-Trust 同值;留空则关闭该通道
+      - DEVICE_TRUST_TOKEN=${DEVICE_TRUST_TOKEN:-}
     ports:
       # 面板主入口(自带登录认证)。配合 Caddy HTTPS 时可改 VISUALIZER_BIND=127.0.0.1
+      # 安全规范:本 compose 任何服务新增端口一律绑 127.0.0.1(如 "${VAR:-127.0.0.1}:3000:3000"),
+      # 对外入口只有 Caddy 的 80/443——docker 发布端口会绕过 ufw,绑定规范是第一道防线。
       - "${VISUALIZER_BIND:-127.0.0.1}:8080:8080"
     volumes:
       # 面板用户数据:账号(users.json)、充电费用、充电桩信息、瓦片缓存
@@ -155,6 +159,8 @@ services:
       - "443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # 设备证书免密:CA 只读挂入,供 tls client_auth 校验(见 Caddyfile.example 注释)
+      - ./data/pki:/pki:ro
       - caddy_data:/data
       - caddy_config:/config
 

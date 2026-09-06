@@ -1699,6 +1699,7 @@ footer a { color: var(--text-muted); }
 #ctl-main.preview .ctl-step,
 #ctl-main.preview .ctl-apply,
 #ctl-main.preview .ctl-mini,
+#ctl-main.preview .ctl-btn,
 #ctl-main.preview .ctl-wide,
 #ctl-main.preview input[type="range"] { opacity: 0.72; }
 

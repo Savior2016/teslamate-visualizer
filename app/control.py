@@ -41,6 +41,40 @@ _cmd_log: dict[str, list[float]] = defaultdict(list)
 CMD_WINDOW = 600.0
 CMD_LIMIT = 30
 
+# 控制审计:每次指令下发(含「定时哨兵」等自动来源)落盘 panel_manual,
+# key 为零填充毫秒时间戳,字典序即时间序;只保留最近 500 条,随数据库备份走。
+_AUDIT_KIND = "control_audit"
+_AUDIT_KEEP = 500
+
+
+def _audit(user: str, cmd: str, args: dict, result: dict) -> None:
+    """记录一次指令下发;审计写库失败不影响指令主流程。"""
+    try:
+        entry = {"at": int(time.time()), "user": str(user), "cmd": cmd, "args": args or {},
+                 "ok": bool(result.get("ok")), "reason": str(result.get("reason") or "")[:200]}
+        if result.get("woke"):
+            entry["woke"] = True
+        _m()._exec(
+            "INSERT INTO panel_manual (kind, key, payload) VALUES (%s, %s, %s) "
+            "ON CONFLICT (kind, key) DO UPDATE SET payload = EXCLUDED.payload",
+            (_AUDIT_KIND, f"{int(time.time() * 1000):013d}", Jsonb(entry)),
+        )
+        _m()._exec(
+            "DELETE FROM panel_manual WHERE kind = %s AND key NOT IN "
+            "(SELECT key FROM panel_manual WHERE kind = %s ORDER BY key DESC LIMIT %s)",
+            (_AUDIT_KIND, _AUDIT_KIND, _AUDIT_KEEP),
+        )
+    except Exception:  # noqa: BLE001 — 见 docstring
+        pass
+
+
+@router.get("/api/control/audit")
+def control_audit(request: Request):
+    """最近 200 条控制指令下发记录(新→旧),仅管理员可见。"""
+    _m().require_admin(request)
+    rows = _m().q("SELECT payload FROM panel_manual WHERE kind = %s ORDER BY key DESC LIMIT 200", (_AUDIT_KIND,))
+    return {"entries": [r["payload"] for r in rows]}
+
 # 指令白名单与参数校验:键=指令名,值=允许的参数范围说明(校验在 _validate_args)
 _CMDS = {
     "wake_up": {},
@@ -476,16 +510,25 @@ def send_command(body: CommandIn, request: Request):
 
     if body.cmd == "flash_strobe":
         _ensure_awake(_vin())
-        return _strobe_start(body.args or {})
+        result = _strobe_start(body.args or {})
+        _audit(user, body.cmd, body.args or {}, result)
+        return result
     if body.cmd == "flash_strobe_stop":
-        return _strobe_cancel()
+        result = _strobe_cancel()
+        _audit(user, body.cmd, {}, result)
+        return result
 
     args = _validate_args(body.cmd, body.args or {})
     vin = _vin()
     woke = body.cmd != "wake_up" and _ensure_awake(vin)
-    result = {"cmd": body.cmd, **_forward_with_wake(body.cmd, args, vin)}
+    try:
+        result = {"cmd": body.cmd, **_forward_with_wake(body.cmd, args, vin)}
+    except HTTPException as exc:
+        _audit(user, body.cmd, args, {"ok": False, "reason": str(exc.detail)})
+        raise
     if woke:
         result["woke"] = True
+    _audit(user, body.cmd, args, result)
     patch = _state_patch(body.cmd, args)
     if result.get("ok") and patch:
         try:

@@ -67,3 +67,36 @@
 .ctl-seg button{border:0;border-right:1px solid var(--border);background:var(--page);color:var(--text-secondary);padding:8px 14px;font-size:14px;cursor:pointer}
 .ctl-seg button:last-child{border-right:0}
 .ctl-seg button.on{background:var(--series-1);color:#fff}
+
+/* 小窗内滑动开关收窄:全长轨道单手难拖,限制为约 2/3 宽(主页模块瓦片滑块不受影响) */
+#ctl-dialog-body .ctl-slide{max-width:240px}
+
+/* 底部操作按钮:刷新车辆状态 / 控制审计 */
+.ctl-foot-actions{display:flex;gap:10px;margin-top:12px}
+.ctl-btn{flex:1;font:inherit;font-size:14px;padding:11px 16px;border-radius:10px;border:1px solid var(--border);background:linear-gradient(180deg,var(--surface-1),var(--page));color:var(--text-primary);cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.18),inset 0 1px 0 rgba(255,255,255,.07);transition:transform .12s ease,border-color .15s ease}
+.ctl-btn:hover{border-color:var(--baseline)}
+.ctl-btn:active{transform:translateY(1px)}
+.ctl-btn:disabled{opacity:.45;cursor:default}
+
+/* 控制审计弹窗:与操作小窗同款卡片 */
+#ctl-audit-dialog{box-sizing:border-box;width:calc(100% - 32px);max-width:430px;max-height:85dvh;overflow:auto;padding:22px;border:1px solid var(--border);border-radius:18px;background:var(--surface-1);color:var(--text-primary)}
+#ctl-audit-dialog::backdrop{background:rgba(0,0,0,.6)}
+#ctl-audit-dialog .ctl-tip{font-size:13px;line-height:1.7;color:var(--text-secondary)}
+.ctl-audit-list{display:flex;flex-direction:column;gap:2px;max-height:55dvh;overflow:auto;margin-top:8px}
+.ctl-audit-row{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;padding:9px 4px;border-bottom:1px solid var(--border);font-size:13px}
+.ctl-audit-row:last-child{border-bottom:0}
+.ctl-audit-row time{color:var(--text-muted);white-space:nowrap;padding-top:1px}
+.ctl-audit-row .ctl-audit-what{min-width:0;overflow-wrap:anywhere}
+.ctl-audit-row b{grid-column:2;font-weight:400;font-size:12px;color:var(--series-3)}
+.ctl-audit-row.fail b{color:#db7777}
+
+/* 定时哨兵:时段列表 + 添加行(须压过 #ctl-dialog-body 的通用按钮/输入框样式) */
+.ctl-sched{margin-top:20px;border-top:1px solid var(--border);padding-top:6px}
+.ctl-sched-list{display:flex;flex-direction:column;gap:8px;margin:10px 0}
+.ctl-sched-row{display:flex;align-items:center;gap:10px;font-size:14px}
+.ctl-sched-row span{flex:1;font-variant-numeric:tabular-nums}
+#ctl-dialog-body .ctl-sched-row button,#ctl-dialog-body .ctl-sched-add button{border:1px solid var(--border);background:var(--page);color:var(--text-secondary);padding:6px 12px;border-radius:8px;font-size:12.5px;cursor:pointer;box-shadow:none}
+#ctl-dialog-body .ctl-sched-row button.ctl-sched-toggle.on{color:var(--cat-sentry);border-color:color-mix(in srgb,var(--cat-sentry) 45%,transparent)}
+#ctl-dialog-body .ctl-sched-row button:disabled,#ctl-dialog-body .ctl-sched-add button:disabled{opacity:.45;cursor:default}
+.ctl-sched-add{display:flex;gap:8px;align-items:center;margin-top:6px}
+#ctl-dialog-body .ctl-sched-add input{flex:1;min-width:0;width:auto;margin:0;padding:8px;font-size:14px;background:var(--page);color:var(--text-primary);border:1px solid var(--border);border-radius:8px}
