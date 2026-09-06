@@ -38,14 +38,15 @@
     const s=model.states||{};
     Object.entries(zones).forEach(([zone,[key,on,off]])=>{
       const element=document.querySelector(`.ctl-zone[data-zone="${zone}"]`);if(!element)return;
-      const value=s[key];
+      let value=s[key];
+      if(zone==='chargeport'&&s.charging===true)value=true;  // 充电中充电口必然打开:同步亮绿
       element.classList.toggle('on',value===true);
       element.classList.toggle('unknown',value==null);
       if(zone==='lock')element.classList.toggle('unlocked',value===false);
       element.setAttribute('aria-label',names[zone]+'：'+(value==null?'状态未知':value?on:off)+'，点击查看操作');
     });
   }
-  /* 模块小窗滑块:点击直接发开/关指令,滑块位置与卡片发光即状态 */
+  /* 模块小窗:整个模块就是开关,点击直接发开/关指令,整卡变色发光即状态 */
   const SWITCH={
     climate:{on:['auto_conditioning_start',{}],off:['auto_conditioning_stop',{}],state:()=>model.states?.climate_on},
     charge:{on:['charge_start',{}],off:['charge_stop',{}],state:()=>model.states?.charging},
@@ -58,10 +59,7 @@
       const on=SWITCH[name].state();
       tile.classList.toggle('on',on===true);
       tile.classList.toggle('unknown',on==null);
-      const sw=tile.querySelector('.ctl-switch');if(!sw)return;
-      sw.classList.toggle('on',on===true);
-      sw.setAttribute('aria-checked',on===true?'true':'false');
-      sw.disabled=busy||!canWrite();
+      tile.setAttribute('aria-checked',on===true?'true':'false');
     });
   }
   function render(){
@@ -98,27 +96,32 @@
     items.forEach(item=>{const b=document.createElement('button');b.textContent=item.label;b.type='button';b.disabled=!canWrite();b.addEventListener('click',()=>command(item));row.appendChild(b);});
     $('ctl-dialog-body').appendChild(row);
   }
-  /* 开关行:滑块即开/关,滑动与变色即状态;旋钮带模块图形标识(ic-* 类),flip 返回新的开态(null=保持不变) */
+  /* 开关行:整行即开关,点击/键盘开/关,整行按模块色点亮;flip 返回新的开态(null=保持不变) */
   function switchRow(label,hint,isOn,flip,icon,color){
-    const row=document.createElement('div');row.className='ctl-switch-row';
+    const row=document.createElement('div');row.className='ctl-switch-row'+(icon?' ic-'+icon:'');
+    row.setAttribute('role','switch');row.tabIndex=0;
+    if(color)row.style.setProperty('--mc',color);
+    const ico=document.createElement('i');ico.className='ctl-row-ico';ico.setAttribute('aria-hidden','true');row.appendChild(ico);
     const box=document.createElement('div');
     const span=document.createElement('span');span.textContent=label;box.appendChild(span);
     if(hint){const small=document.createElement('small');small.textContent=hint;box.appendChild(small);}
     row.appendChild(box);
-    const sw=document.createElement('button');sw.type='button';sw.className='ctl-switch'+(icon?' ic-'+icon:'');sw.setAttribute('role','switch');
-    if(color)sw.style.setProperty('--mc',color);
-    sw.setAttribute('aria-checked',isOn?'true':'false');sw.setAttribute('aria-label',label+'开关');sw.disabled=!canWrite();
-    sw.classList.toggle('on',isOn);sw.appendChild(document.createElement('i'));
-    sw.addEventListener('click',async()=>{
-      if(busy||sw.disabled)return;
-      const target=sw.getAttribute('aria-checked')!=='true';
-      sw.classList.add('busy');
+    const state=document.createElement('b');state.className='ctl-row-state';row.appendChild(state);
+    const apply=on=>{row.classList.toggle('on',on);row.setAttribute('aria-checked',on?'true':'false');state.textContent=on?'开启':'关闭';};
+    apply(isOn);
+    row.setAttribute('aria-label',label+'开关');
+    const fire=async()=>{
+      if(busy||!canWrite())return;
+      const target=row.getAttribute('aria-checked')!=='true';
+      row.classList.add('busy');
       const next=await flip(target);
-      sw.classList.remove('busy');
+      row.classList.remove('busy');
       if(next==null)return;
-      sw.classList.toggle('on',next);sw.setAttribute('aria-checked',next?'true':'false');
-    });
-    row.appendChild(sw);$('ctl-dialog-body').appendChild(row);
+      apply(next);
+    };
+    row.addEventListener('click',fire);
+    row.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();fire();}});
+    $('ctl-dialog-body').appendChild(row);
   }
   function tip(text){const p=document.createElement('p');p.className='ctl-tip';p.textContent=text;$('ctl-dialog-body').appendChild(p);}
   function input(id,label,value,min,max,step=1){
@@ -214,31 +217,35 @@
     try{model.nap=await api('nap/'+(start?'start':'stop'),start?{minutes}:{});message(model.nap.error||'午休设置已更新',!!model.nap.error);}
     catch(e){message(e.message,true);}finally{busy=false;await load();renderNap();}
   }
-  /* 模块小窗滑块:点击直接开/关(不打开弹窗) */
-  async function flipSwitch(name,sw){
-    if(busy||!canWrite())return;
+  /* 模块小窗即开关:点击整卡直接开/关;角上小按钮打开详细设置弹窗 */
+  async function flipSwitch(name,tile){
+    if(busy)return;
+    if(!model.configured){message('尚未接入车辆控制：请先在个人中心完成配置后使用。',true);return;}
+    if(model.role!=='admin'){message('只读账号：可以查看状态，不能操作车辆。',true);return;}
     const spec=SWITCH[name];const on=spec.state()===true;
     if(name==='nap'){await nap(!on,on?undefined:napMinutes());return;}
     const [cmd,argsOrFn,cfmOrFn]=on?spec.off:spec.on;
     const args=typeof argsOrFn==='function'?argsOrFn():argsOrFn;
     const cfm=typeof cfmOrFn==='function'?cfmOrFn():cfmOrFn;
     if(cfm&&!confirm(cfm))return;
-    busy=true;sw.classList.add('busy');render();message(SENDING);
+    busy=true;tile.classList.add('busy');render();message(SENDING);
     try{
       const result=await api('command',{cmd,args});
       message(result.ok?(result.woke?'车辆已唤醒，':'')+'指令已接受，请刷新确认车辆状态':result.reason||'车辆未接受指令',!result.ok);
     }
     catch(e){message(e.message,true);}
-    finally{sw.classList.remove('busy');busy=false;await load();}
+    finally{tile.classList.remove('busy');busy=false;await load();}
   }
   $('ctl-refresh').addEventListener('click',refresh);
-  document.querySelectorAll('[data-panel]').forEach(b=>{
-    b.addEventListener('click',()=>open(b.dataset.panel));
-    b.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open(b.dataset.panel);}});
+  document.querySelectorAll('.ctl-module[data-panel]').forEach(t=>{
+    const name=t.dataset.panel;
+    t.addEventListener('click',()=>flipSwitch(name,t));
+    t.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();flipSwitch(name,t);}});
   });
-  document.querySelectorAll('.ctl-switch[data-switch]').forEach(sw=>{
-    sw.addEventListener('click',e=>{e.stopPropagation();flipSwitch(sw.dataset.switch,sw);});
-    sw.addEventListener('keydown',e=>e.stopPropagation());
+  document.querySelectorAll('.ctl-module-open').forEach(b=>{
+    const name=b.closest('.ctl-module').dataset.panel;
+    b.addEventListener('click',e=>{e.stopPropagation();open(name);});
+    b.addEventListener('keydown',e=>e.stopPropagation());
   });
   document.querySelectorAll('.ctl-car .ctl-zone').forEach(z=>{
     const show=()=>open(['flash','honk'].includes(z.dataset.zone)?'lights':z.dataset.zone);

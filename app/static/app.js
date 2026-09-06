@@ -2345,7 +2345,13 @@
       const b = e.target.closest('.tab');
       if (b) switchTab(b.dataset.page);
     });
-    switchTab(location.hash === '#control' ? 'control' : (localStorage.getItem('ttv-tab') || 'overview'), false);
+    // #control 深链(配置流程返回)只生效一次:清掉 hash,否则之后每次刷新都会被它拉回控制页
+    if (location.hash === '#control') {
+      switchTab('control');
+      history.replaceState(null, '', location.pathname + location.search);
+    } else {
+      switchTab(localStorage.getItem('ttv-tab') || 'overview', false);
+    }
 
     // 车辆总览:电量 % / 度数 kWh / 里程 km 三态切换(本卡片独立,持久化)
     const carSeg = $('#car-mode-seg');

@@ -7,7 +7,7 @@
   <title>TESLA Home</title>
   <link rel="stylesheet" href="/leaflet.css">
   <link rel="stylesheet" href="/style.css">
-  <link rel="stylesheet" href="/control.css?v=3">
+  <link rel="stylesheet" href="/control.css?v=4">
 </head>
 <body>
 <div class="wrap">
@@ -491,21 +491,21 @@
           </div>
 
           <div class="ctl-modules" aria-label="车辆控制模块">
-            <div class="ctl-module" data-panel="climate" role="button" tabindex="0" style="--mc:var(--series-1)">
+            <div class="ctl-module" data-panel="climate" role="switch" tabindex="0" aria-checked="false" aria-label="空调开关" style="--mc:var(--series-1)">
               <span>空调温度</span><b id="ctl-module-climate">查看与调节</b>
-              <button class="ctl-switch ic-climate" data-switch="climate" type="button" role="switch" aria-checked="false" aria-label="空调开关"><i></i></button>
+              <button class="ctl-module-open" type="button" aria-label="空调详细设置"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg></button>
             </div>
-            <div class="ctl-module" data-panel="charge" role="button" tabindex="0" style="--mc:var(--cat-charge)">
+            <div class="ctl-module" data-panel="charge" role="switch" tabindex="0" aria-checked="false" aria-label="充电开关" style="--mc:var(--cat-charge)">
               <span>充电控制</span><b id="ctl-module-charge">启停与上限</b>
-              <button class="ctl-switch ic-charge" data-switch="charge" type="button" role="switch" aria-checked="false" aria-label="充电开关"><i></i></button>
+              <button class="ctl-module-open" type="button" aria-label="充电详细设置"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg></button>
             </div>
-            <div class="ctl-module" data-panel="lights" role="button" tabindex="0" style="--mc:var(--series-4)">
+            <div class="ctl-module" data-panel="lights" role="switch" tabindex="0" aria-checked="false" aria-label="连续闪灯开关" style="--mc:var(--series-4)">
               <span>车灯与鸣笛</span><b id="ctl-module-lights">闪灯 / 连续闪灯</b>
-              <button class="ctl-switch ic-lights" data-switch="lights" type="button" role="switch" aria-checked="false" aria-label="连续闪灯开关"><i></i></button>
+              <button class="ctl-module-open" type="button" aria-label="车灯详细设置"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg></button>
             </div>
-            <div class="ctl-module" data-panel="nap" role="button" tabindex="0" style="--mc:var(--cat-idle)">
+            <div class="ctl-module" data-panel="nap" role="switch" tabindex="0" aria-checked="false" aria-label="午休模式开关" style="--mc:var(--cat-idle)">
               <span>午休模式</span><b id="ctl-module-nap">定时露营</b>
-              <button class="ctl-switch ic-nap" data-switch="nap" type="button" role="switch" aria-checked="false" aria-label="午休模式开关"><i></i></button>
+              <button class="ctl-module-open" type="button" aria-label="午休详细设置"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg></button>
             </div>
           </div>
         </div>
@@ -594,7 +594,7 @@
 
 <script src="/echarts.min.js"></script>
 <script src="/leaflet.js"></script>
-<script src="/control.js?v=3"></script>
+<script src="/control.js?v=4"></script>
 <script src="/app.js"></script>
 </body>
 </html>

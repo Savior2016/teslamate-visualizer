@@ -123,6 +123,10 @@ def _state_patch(cmd: str, args: dict) -> dict | None:
         return {"charge_port": True}
     if cmd == "charge_port_door_close":
         return {"charge_port": False}
+    if cmd == "charge_start":
+        return {"charging": True}
+    if cmd == "charge_stop":
+        return {"charging": False}
     return None
 
 
@@ -201,20 +205,30 @@ def vehicle_data(vin):
 
 
 def _states():
-    with _snapshot_lock:
-        state = dict(_snapshot)
-    if state.get("reported_at") and time.time() * 1000 - state["reported_at"] <= 120000:
-        return state
+    """车辆当前状态:乐观推测(面板最近成功指令,已持久化)打底,
+    新鲜的 Fleet 快照 / TeslaMate 实报以非 None 值覆盖(实报优先)。"""
     out = {k: None for k in CURRENT_FIELDS}
+    try:
+        optimistic = _optimistic()
+        for k in CURRENT_FIELDS:
+            if optimistic.get(k) is not None:
+                out[k] = optimistic[k]
+    except Exception:  # noqa: BLE001 — 乐观状态读取失败不影响实报
+        pass
+    out["source"] = "unknown"
+    with _snapshot_lock:
+        snap = dict(_snapshot)
+    if snap.get("reported_at") and time.time() * 1000 - snap["reported_at"] <= 120000:
+        out.update({k: v for k, v in snap.items() if v is not None})
+        return out
     try:
         live = _live_states()
         # Only recent TeslaMate climate/charge fields can supplement unknown Fleet data.
         if live.get("reported_at") and time.time() * 1000 - live["reported_at"] <= 120000:
-            out.update(live)
+            out.update({k: v for k, v in live.items() if v is not None})
             out["source"] = "teslamate"
     except Exception:
         pass
-    out.setdefault("source", "unknown")
     return out
 
 
@@ -225,7 +239,7 @@ def refresh_vehicle(request: Request):
     vin = _vin()
     with _snapshot_lock:
         if vin == _snapshot_vin and time.time() - _snapshot_checked < 10:
-            return {"ok": not bool(_snapshot_error), "states": dict(_snapshot), "detail": _snapshot_error}
+            return {"ok": not bool(_snapshot_error), "states": _states(), "detail": _snapshot_error}
         _snapshot_checked, _snapshot_vin = time.time(), vin
         try:
             _snapshot = normalize_vehicle(vehicle_data(vin))
@@ -233,7 +247,8 @@ def refresh_vehicle(request: Request):
         except HTTPException as e:
             _snapshot = {k: None for k in CURRENT_FIELDS}
             _snapshot_error = e.detail
-        return {"ok": not bool(_snapshot_error), "states": dict(_snapshot), "detail": _snapshot_error}
+    # 快照之外补上乐观推测状态(锁/哨兵/车窗等不上报项),与 status 接口口径一致
+    return {"ok": not bool(_snapshot_error), "states": _states(), "detail": _snapshot_error}
 
 
 class CommandIn(BaseModel):

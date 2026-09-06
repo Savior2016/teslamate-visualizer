@@ -95,7 +95,13 @@ def test_state_requires_fresh_explicit_values(monkeypatch):
     monkeypatch.setattr(control,'_snapshot',{})
     monkeypatch.setattr(control,'_live_states',lambda:{})
     monkeypatch.setattr(control,'_optimistic',lambda:{'locked':True})
-    assert control._states()['locked'] is None
+    # 实报缺失时以持久化的乐观推测为准(否则开关刷新后全部掉回未知/关闭)
+    assert control._states()['locked'] is True
+    # 新鲜实报的非 None 值覆盖乐观推测
+    ts=int(time.time()*1000)
+    monkeypatch.setattr(control,'_live_states',lambda:{'climate_on':False,'reported_at':ts})
+    merged=control._states()
+    assert merged['locked'] is True and merged['climate_on'] is False and merged['source']=='teslamate'
 
 
 def test_new_endpoints_block_viewer(client):

@@ -38,19 +38,22 @@ with sync_playwright() as pw:
             assert 'on' in (page.locator('[data-zone="frunk"]').get_attribute('class') or '').split()
             assert page.locator('[data-zone="frunk"] .zone-lab').text_content()=='前备箱'
             assert 'on' in (page.locator('[data-zone="lock"]').get_attribute('class') or '').split()
-            assert page.locator('.ctl-module').count()==4
-            assert page.locator('.ctl-switch[data-switch]').count()==4
+            assert page.locator('.ctl-module[data-panel]').count()==4
+            assert page.locator('.ctl-module-open').count()==4
+            # #control 深链只生效一次:hash 被清除,刷新后靠 localStorage 停留当前页
+            assert page.evaluate('location.hash')==''
             assert not page.locator('#ctl-setup').is_visible()
             page.on('dialog',lambda d:d.accept())
-            # 模块小窗滑块:点击直接发开/关指令(空调当前开 → 发关闭)
+            # 模块整卡即开关:点击直接发开/关指令(空调当前开 → 发关闭)
             if role=='admin':
                 assert 'on' in (page.locator('[data-panel="climate"]').get_attribute('class') or '').split()
-                page.locator('.ctl-switch[data-switch="climate"]').click()
+                page.locator('[data-panel="climate"]').click()
                 page.wait_for_function("document.querySelector('#ctl-operation-message').textContent.includes('指令已接受')")
             else:
-                assert page.locator('.ctl-switch[data-switch="climate"]').is_disabled()
+                page.locator('[data-panel="climate"]').click()
+                page.wait_for_function("document.querySelector('#ctl-operation-message').textContent.includes('只读')")
             for name in ['climate','charge','lights','nap']:
-                page.locator('[data-panel="'+name+'"]').click()
+                page.locator('[data-panel="'+name+'"] .ctl-module-open').click()
                 assert page.locator('#ctl-dialog').is_visible()
                 box=page.locator('#ctl-dialog').bounding_box();assert box['x']>=0 and box['x']+box['width']<=width
                 if name=='climate':
@@ -60,9 +63,9 @@ with sync_playwright() as pw:
                         page.wait_for_function("document.querySelector('#ctl-dialog-message').textContent.includes('指令已接受')")
                     else:
                         assert page.get_by_role('button',name='设置温度',exact=True).is_disabled()
-                        assert page.locator('#ctl-dialog-body .ctl-switch').first.is_disabled()
+                        assert page.locator('#ctl-dialog-body .ctl-switch-row').count()>=1
                 if name=='nap' and role=='admin':
-                    nap_switch=page.locator('#ctl-dialog-body .ctl-switch')
+                    nap_switch=page.locator('#ctl-dialog-body .ctl-switch-row')
                     nap_switch.click()
                     page.wait_for_function("document.querySelector('#ctl-nap-status').textContent.includes('剩余')")
                     nap_switch.click()
