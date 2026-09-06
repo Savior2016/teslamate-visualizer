@@ -58,6 +58,7 @@
   function renderStatus(s) {
     $('control-settings-entry').style.display = s.role === 'admin' ? '' : 'none';
     $('acct-user-name').textContent = s.user || '—';
+    if (s.role === 'admin') loadCertInfo();
 
     const banner = $('tesla-banner');
     if (s.tesla.authorized) {
@@ -203,6 +204,29 @@
       loadStatus();
     } catch (e) {
       alert(e.message);
+    }
+  }
+
+  /* ---------- iPhone 免密(设备证书) ---------- */
+  let certLoaded = false;
+  async function loadCertInfo() {
+    if (certLoaded) return;
+    certLoaded = true;
+    const card = $('card-device-cert');
+    try {
+      const info = await api('/api/device/cert/info');
+      if (!info.enabled) return;  // 免密通道未配置:卡片保持隐藏
+      card.style.display = '';
+      if (info.available) {
+        $('dc-password').textContent = info.export_password || '(见服务器 data/pki/EXPORT_PASSWORD.txt)';
+      } else {
+        $('dc-download').style.display = 'none';
+        $('dc-password').textContent = '—';
+        msg($('dc-msg'), '设备证书尚未生成:请在服务器上运行 scripts/make-device-cert.sh', false);
+      }
+    } catch (e) {
+      card.style.display = '';
+      msg($('dc-msg'), e.message, false);
     }
   }
 

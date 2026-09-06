@@ -213,6 +213,21 @@
     <div class="form-msg" id="nu-msg"></div>
   </section>
 
+  <!-- iPhone 免密访问(设备证书),仅管理员可见 -->
+  <section class="card" id="card-device-cert" style="display:none">
+    <h2>iPhone 免密访问</h2>
+    <p style="font-size:13px;color:var(--text-secondary);line-height:1.7;margin:4px 0 10px">
+      在这台 iPhone 上安装设备证书后,Safari 访问本面板<b>不再要求输密码</b>;其他设备照常密码登录。
+      安装步骤:① 点击下方按钮下载证书 → ② 设置 → 已下载描述文件 → 安装,输入导出密码 →
+      ③ 重新打开本网站,弹窗中选择「TESLA Home iPhone」。手机丢失或换机请在服务器上重签证书。
+    </p>
+    <div class="form-row" style="align-items:center">
+      <a class="btn" id="dc-download" href="/api/device/cert" style="text-decoration:none;white-space:nowrap">⬇ 下载设备证书</a>
+      <span style="font-size:13px;color:var(--text-secondary)">导出密码:<code id="dc-password" style="background:var(--page);border:1px solid var(--border);border-radius:5px;padding:2px 8px;font-size:13px">…</code></span>
+    </div>
+    <div class="form-msg" id="dc-msg"></div>
+  </section>
+
   <!-- 数据备份 / 迁移 -->
   <section class="card">
     <h2>数据备份 / 迁移</h2>

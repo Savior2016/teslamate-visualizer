@@ -1512,6 +1512,21 @@ class UserAdd(BaseModel):
     role: str = "viewer"
 
 
+@app.get("/api/device/cert/info")
+def device_cert_info(request: Request):
+    """设备证书状态与 p12 导出密码(仅管理员;enabled=免密通道是否已配置)。"""
+    require_admin(request)
+    password = ""
+    try:
+        with open("/data/pki/EXPORT_PASSWORD.txt", encoding="utf-8") as f:
+            password = f.read().strip()
+    except OSError:
+        pass
+    return {"enabled": bool(DEVICE_TRUST_TOKEN),
+            "available": os.path.exists("/data/pki/iphone.p12"),
+            "export_password": password}
+
+
 @app.get("/api/device/cert")
 def device_cert(request: Request):
     """下载 iPhone 免密设备证书(p12),仅管理员。证书由 scripts/make-device-cert.sh 生成;
