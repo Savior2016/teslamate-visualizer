@@ -40,17 +40,17 @@ with sync_playwright() as pw:
             assert 'on' in (page.locator('[data-zone="lock"]').get_attribute('class') or '').split()
             assert page.locator('.ctl-module[data-panel]').count()==4
             assert page.locator('.ctl-module-open').count()==4
+            assert page.locator('.ctl-module .ctl-slide').count()==4
             # #control 深链只生效一次:hash 被清除,刷新后靠 localStorage 停留当前页
             assert page.evaluate('location.hash')==''
             assert not page.locator('#ctl-setup').is_visible()
-            page.on('dialog',lambda d:d.accept())
-            # 模块整卡即开关:点击直接发开/关指令(空调当前开 → 发关闭)
+            # 模块滑动开关:键盘 Enter 触发开/关(空调当前开 → 发关闭);滑动本身即确认,无确认窗
             if role=='admin':
                 assert 'on' in (page.locator('[data-panel="climate"]').get_attribute('class') or '').split()
-                page.locator('[data-panel="climate"]').click()
+                page.locator('[data-panel="climate"] .ctl-slide').press('Enter')
                 page.wait_for_function("document.querySelector('#ctl-operation-message').textContent.includes('指令已接受')")
             else:
-                page.locator('[data-panel="climate"]').click()
+                page.locator('[data-panel="climate"] .ctl-slide').press('Enter')
                 page.wait_for_function("document.querySelector('#ctl-operation-message').textContent.includes('只读')")
             for name in ['climate','charge','lights','nap']:
                 page.locator('[data-panel="'+name+'"] .ctl-module-open').click()
@@ -63,20 +63,30 @@ with sync_playwright() as pw:
                         page.wait_for_function("document.querySelector('#ctl-dialog-message').textContent.includes('指令已接受')")
                     else:
                         assert page.get_by_role('button',name='设置温度',exact=True).is_disabled()
-                        assert page.locator('#ctl-dialog-body .ctl-switch-row').count()>=1
+                        assert page.locator('#ctl-dialog-body .ctl-slide-row .ctl-slide').count()>=1
                 if name=='nap' and role=='admin':
-                    nap_switch=page.locator('#ctl-dialog-body .ctl-switch-row')
-                    nap_switch.click()
+                    nap_switch=page.locator('#ctl-dialog-body .ctl-slide-row .ctl-slide')
+                    nap_switch.press('Enter')
                     page.wait_for_function("document.querySelector('#ctl-nap-status').textContent.includes('剩余')")
-                    nap_switch.click()
+                    nap_switch.press('Enter')
                     page.wait_for_function("document.querySelector('#ctl-nap-status').textContent==='已结束'")
                 page.keyboard.press('Escape')
                 assert not page.locator('#ctl-dialog').is_visible()
+            # 前备箱:滑动触发后弹出自定义二次确认窗
+            if role=='admin':
+                page.locator('[data-zone="frunk"]').dispatch_event('click')
+                assert page.locator('#ctl-dialog').is_visible()
+                page.locator('#ctl-dialog-body .ctl-slide').press('Enter')
+                assert page.locator('#ctl-confirm[open]').is_visible()
+                page.locator('#ctl-confirm-yes').click()
+                page.wait_for_function("document.querySelector('#ctl-dialog-message').textContent.includes('指令已接受')")
+                page.keyboard.press('Escape')
             assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
             if role=='admin':
                 assert ('control/command',{'cmd':'set_temps','args':{'driver_temp':23.5}}) in commands
                 assert ('control/command',{'cmd':'auto_conditioning_stop','args':{}}) in commands
-                assert len(commands)==4
+                assert ('control/command',{'cmd':'actuate_trunk','args':{'which_trunk':'front'}}) in commands
+                assert len(commands)==5
             else:assert not commands
             # No configuration: show one tidy link; a partially configured user returns via account settings.
             state.update(configured=False,ever_configured=False)

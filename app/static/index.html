@@ -7,7 +7,7 @@
   <title>TESLA Home</title>
   <link rel="stylesheet" href="/leaflet.css">
   <link rel="stylesheet" href="/style.css">
-  <link rel="stylesheet" href="/control.css?v=4">
+  <link rel="stylesheet" href="/control.css?v=5">
 </head>
 <body>
 <div class="wrap">
@@ -372,7 +372,7 @@
       <div class="card-head">
         <div>
           <h2>车辆控制</h2>
-          <div class="card-sub">指令经你配置的 Tesla 指令后端签名后下发 · 敏感操作二次确认</div>
+          <div class="card-sub">车身部位点按查看 · 模块右滑开启、回滑关闭</div>
         </div>
         <div class="mini-stats" id="ctl-backend"></div>
       </div>
@@ -487,29 +487,33 @@
               <path class="car-body-line" d="M170 52 C196 52 218 62 232 84 C243 100 251 118 256 142 C261 168 263 190 261 210 C260 228 259 244 259 258 C259 288 261 316 261 334 C260 356 255 378 245 392 C233 408 205 418 170 418 C135 418 107 408 95 392 C85 378 80 356 79 334 C79 316 81 288 81 258 C81 244 80 228 79 210 C77 190 79 168 84 142 C89 118 97 100 108 84 C122 62 144 52 170 52 Z" pointer-events="none"/>
             </svg>
             <div class="ctl-chips" id="ctl-chips"></div>
-            <p class="ctl-legend-hint">车头盖 = 前备箱 · 前风挡 = 哨兵 · 左右灯角 = 闪灯/鸣笛 · 左门 = 车锁 · 右窗 = 车窗 · 玻璃顶 = 空调 · 左后翼子板 = 充电口 · 车尾 = 后备箱 · 部位发绿光 = 开启/已锁,半暗 = 状态未知</p>
+            <p class="ctl-legend-hint">点按车身部位操作 · 部位发绿光 = 开启/已锁</p>
           </div>
 
           <div class="ctl-modules" aria-label="车辆控制模块">
-            <div class="ctl-module" data-panel="climate" role="switch" tabindex="0" aria-checked="false" aria-label="空调开关" style="--mc:var(--series-1)">
-              <span>空调温度</span><b id="ctl-module-climate">查看与调节</b>
+            <div class="ctl-module" data-panel="climate" style="--mc:var(--series-1)">
+              <span>空调温度</span>
               <button class="ctl-module-open" type="button" aria-label="空调详细设置"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg></button>
+              <b id="ctl-module-climate">查看与调节</b>
             </div>
-            <div class="ctl-module" data-panel="charge" role="switch" tabindex="0" aria-checked="false" aria-label="充电开关" style="--mc:var(--cat-charge)">
-              <span>充电控制</span><b id="ctl-module-charge">启停与上限</b>
+            <div class="ctl-module" data-panel="charge" style="--mc:var(--cat-charge)">
+              <span>充电控制</span>
               <button class="ctl-module-open" type="button" aria-label="充电详细设置"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg></button>
+              <b id="ctl-module-charge">启停与上限</b>
             </div>
-            <div class="ctl-module" data-panel="lights" role="switch" tabindex="0" aria-checked="false" aria-label="连续闪灯开关" style="--mc:var(--series-4)">
-              <span>车灯与鸣笛</span><b id="ctl-module-lights">闪灯 / 连续闪灯</b>
+            <div class="ctl-module" data-panel="lights" style="--mc:var(--series-4)">
+              <span>车灯与鸣笛</span>
               <button class="ctl-module-open" type="button" aria-label="车灯详细设置"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg></button>
+              <b id="ctl-module-lights">闪灯 / 鸣笛</b>
             </div>
-            <div class="ctl-module" data-panel="nap" role="switch" tabindex="0" aria-checked="false" aria-label="午休模式开关" style="--mc:var(--cat-idle)">
-              <span>午休模式</span><b id="ctl-module-nap">定时露营</b>
+            <div class="ctl-module" data-panel="nap" style="--mc:var(--cat-idle)">
+              <span>午休模式</span>
               <button class="ctl-module-open" type="button" aria-label="午休详细设置"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg></button>
+              <b id="ctl-module-nap">定时露营</b>
             </div>
           </div>
         </div>
-        <p class="ctl-note" id="ctl-live-note" role="status">点击刷新读取车辆当前状态；未上报的项目显示未知。</p>
+        <p class="ctl-note" id="ctl-live-note" role="status">点击刷新读取车辆当前状态。</p>
         <button class="ctl-mini" id="ctl-refresh">刷新车辆状态</button>
         <p class="ctl-note" id="ctl-operation-message" role="status" aria-live="polite"></p>
 
@@ -529,6 +533,19 @@
   <dialog id="ctl-dialog" aria-labelledby="ctl-dialog-title">
     <div class="ctl-dialog-head"><h2 id="ctl-dialog-title"></h2><button id="ctl-dialog-close" class="ctl-dialog-close" aria-label="关闭操作窗口"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.3 5.7 16.9 4.3 12 9.2 7.1 4.3 5.7 5.7 10.6 12l-4.9 4.9 1.4 1.4 4.9-4.9 4.9 4.9 1.4-1.4-4.9-4.9z"/></svg></button></div>
     <p id="ctl-dialog-state"></p><div id="ctl-dialog-body"></div><p id="ctl-dialog-message" role="status" aria-live="polite"></p>
+  </dialog>
+
+  <!-- 二次确认弹窗:仅前/后备箱等风险操作 -->
+  <dialog id="ctl-confirm" class="ctl-confirm" aria-labelledby="ctl-confirm-title">
+    <div class="ctl-confirm-card">
+      <span class="ctl-confirm-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7l2-3h12l2 3v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7zm2.6-1-1 1h12.8l-1-1H6.6zM9 12h6v2H9v-2z"/></svg></span>
+      <h3 id="ctl-confirm-title"></h3>
+      <p id="ctl-confirm-text"></p>
+      <div class="ctl-confirm-actions">
+        <button type="button" id="ctl-confirm-no">取消</button>
+        <button type="button" id="ctl-confirm-yes">确认</button>
+      </div>
+    </div>
   </dialog>
 
   <div class="filter-row">
@@ -594,7 +611,7 @@
 
 <script src="/echarts.min.js"></script>
 <script src="/leaflet.js"></script>
-<script src="/control.js?v=4"></script>
+<script src="/control.js?v=5"></script>
 <script src="/app.js"></script>
 </body>
 </html>
