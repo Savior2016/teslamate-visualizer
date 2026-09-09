@@ -28,6 +28,15 @@ BASE = {
  "charging/sessions":{"charges":[]},"energy/cycles":{"cycles":[]},
  "temp/trend":{"inside":[[NOW-3600000,22],[NOW,24]],"outside":[[NOW-3600000,18],[NOW,20]]},
  "parking/fees":{"fees":[],"month_total":0,"total":0},"vehicle/delivery":{"date":"2026-01-01"},
+ "charging/reminder":{"ready":True,"overridden":False,"reason":"",
+   "home":{"label":XSS,"address_ids":[1],"visits":20,"nights":15,"days":2},
+   "work":{"label":"合成公司","address_ids":[8],"visits":18,"nights":1,"days":14},
+   "candidates":[{"key":0,"label":XSS,"address_ids":[1],"visits":20,"nights":15,"days":2},
+                 {"key":1,"label":"合成公司","address_ids":[8],"visits":18,"nights":1,"days":14}],
+   "current_range_km":180.5,"threshold_km":45.0,"days_left":2.6,"charge_by_ts":NOW+2*86400000,
+   "charge_at":"work","charge_place":"公司 · 合成公司",
+   "charger":{"name":"合成快充","location":"合成路","times":3},
+   "leg_km":{"to_work":27.0,"to_home":27.0},"drain_km_day":{"home":7.2,"work":6.0},"sample_legs":20},
  "control/status":{"configured":False,"states":{"locked":None,"climate_on":None,"charging":None,"cable":None}},
  "account/status":{"user":"owner","users":["owner","guest"],"role":"admin","roles":{"owner":"admin","guest":"viewer"},"tesla":{"authorized":True,"token_updated_ts":NOW},"cars":[dict(CAR,vin_tail="------")],"sync":{"positions":10,"drives":2,"charges":2,"last_data_ts":NOW},"steps":{"deployed":True,"authorized":True,"car_detected":True,"synced":True}}
 }

@@ -194,6 +194,19 @@
   <!-- ===== 分页 2:充电 ===== -->
   <section class="page" id="page-charging">
   <div class="grid">
+    <!-- 充电提醒:按家⇄公司通勤与停放耗电推算还能用几天、在哪充;地点自动识别可纠正 -->
+    <div class="card col-12" id="rm-card">
+      <div class="card-head">
+        <div>
+          <h2>充电提醒</h2>
+          <div class="card-sub">只按家⇄公司通勤与停放(哨兵/空调)耗电推算,不含特殊行程;家与公司自动识别,识别错了可点「纠正」</div>
+        </div>
+        <button class="rm-edit-btn" id="rm-edit" type="button" hidden>纠正地点</button>
+      </div>
+      <div id="rm-body"></div>
+      <div id="rm-edit-box" hidden></div>
+    </div>
+
     <div class="card col-12 collapsible" id="cs-card">
       <div class="card-head" id="cs-head" role="button" tabindex="0" title="点击展开 / 收起">
         <div>

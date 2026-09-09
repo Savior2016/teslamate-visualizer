@@ -1054,6 +1054,63 @@ button { touch-action: manipulation; }
 }
 .cg-divider span { font-weight: 400; font-size: 12px; color: var(--text-muted); margin-left: 8px; }
 
+/* ===== 充电提醒 ===== */
+.rm-edit-btn {
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  background: var(--page);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px 12px;
+  flex: none;
+}
+.rm-edit-btn:hover { color: var(--text-primary); }
+
+#rm-body { display: flex; flex-direction: column; gap: 6px; }
+.rm-line { font-size: 14px; color: var(--text-primary); line-height: 1.6; }
+.rm-big { font-size: 19px; font-weight: 700; color: var(--cat-charge); }
+.rm-big.rm-urgent { color: var(--cat-sentry); }
+.rm-when { color: var(--text-primary); }
+.rm-sub { font-size: 12px; color: var(--text-secondary); }
+.rm-anchors { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
+.rm-anchor {
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--page);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+.rm-tag { font-size: 11px; color: var(--seq-blue-500); align-self: center; }
+
+#rm-edit-box { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+.rm-edit-row { font-size: 13px; color: var(--text-secondary); display: flex; align-items: center; gap: 6px; }
+.rm-edit-row select {
+  font: inherit;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--page);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 10px;
+  max-width: 200px;
+}
+.rm-edit-save {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  color: #fff;
+  background: var(--seq-blue-500);
+  border: 0;
+  border-radius: 8px;
+  padding: 7px 18px;
+}
+.rm-edit-save:hover { background: var(--seq-blue-600); }
+.rm-edit-save:disabled { opacity: .5; cursor: default; }
+
 /* ===== 停车费 ===== */
 .pk-form {
   display: flex;

@@ -1892,6 +1892,101 @@
     });
   }
 
+  /* ---------- 充电提醒(家⇄公司通勤推算,数据来源 /api/charging/reminder) ---------- */
+
+  function renderReminder() {
+    const body = $('#rm-body');
+    if (!body || !S.reminder) return;
+    const rm = S.reminder;
+    body.textContent = '';
+    const editBtn = $('#rm-edit');
+    const canEdit = S.overview && S.overview.role === 'admin';
+    editBtn.hidden = !canEdit || !(rm.candidates || []).length;
+
+    const anchors = el('div', 'rm-anchors');
+    anchors.appendChild(el('span', 'rm-anchor', `家:${rm.home ? rm.home.label : '未识别'}`));
+    anchors.appendChild(el('span', 'rm-anchor', `公司:${rm.work ? rm.work.label : '未识别'}`));
+    if (rm.overridden) anchors.appendChild(el('span', 'rm-tag', '已手动纠正'));
+
+    if (!rm.ready) {
+      body.appendChild(el('div', 'rm-line', rm.reason || '行程数据积累中,暂无法预测'));
+      body.appendChild(anchors);
+      return;
+    }
+
+    const line = el('div', 'rm-line');
+    if (rm.days_left === null || rm.days_left === undefined) {
+      line.appendChild(el('span', 'rm-big', rm.reason || '未来 30 天内无需充电'));
+    } else {
+      const days = el('b', 'rm-big' + (rm.days_left <= 2 ? ' rm-urgent' : ''), `还能用约 ${fmtNum(rm.days_left, 1)} 天`);
+      line.appendChild(days);
+      const when = dayLabel(rm.charge_by_ts);
+      const where = rm.charge_place || '';
+      const charger = rm.charger && rm.charger.name
+        ? `,${rm.charger.near_anchor === false ? '平时常去' : '附近常用'}:${rm.charger.name}${rm.charger.location ? `(${rm.charger.location})` : ''}`
+        : '';
+      line.appendChild(el('span', 'rm-when', ` · 建议 ${when} ${fmtClock(rm.charge_by_ts)} 前在 ${where} 充电${charger}`));
+    }
+    body.appendChild(line);
+
+    const detail = [];
+    if (rm.current_range_km) detail.push(`当前续航 ${fmtNum(rm.current_range_km)} km`);
+    if (rm.leg_km && rm.leg_km.to_work && rm.leg_km.to_home)
+      detail.push(`通勤单程 ≈${fmtNum((rm.leg_km.to_work + rm.leg_km.to_home) / 2, 1)} km 续航`);
+    if (rm.drain_km_day) {
+      const parts = [];
+      if (rm.drain_km_day.home) parts.push(`家 ${fmtNum(rm.drain_km_day.home, 1)}`);
+      if (rm.drain_km_day.work) parts.push(`公司 ${fmtNum(rm.drain_km_day.work, 1)}`);
+      if (parts.length) detail.push(`停放掉电 ≈${parts.join(' / ')} km/天`);
+    }
+    if (rm.sample_legs) detail.push(`样本 ${rm.sample_legs} 趟通勤`);
+    body.appendChild(el('div', 'rm-sub', detail.join(' · ')));
+    body.appendChild(anchors);
+  }
+
+  function initReminder() {
+    const btn = $('#rm-edit'), box = $('#rm-edit-box');
+    if (!btn || !box) return;
+    btn.addEventListener('click', () => {
+      const rm = S.reminder || {};
+      box.textContent = '';
+      box.hidden = !box.hidden;
+      if (box.hidden) return;
+      const selects = {};
+      [['家', 'home'], ['公司', 'work']].forEach(([label, key]) => {
+        const row = el('label', 'rm-edit-row', label + ' ');
+        const sel = el('select');
+        sel.appendChild(el('option', '', '自动识别')).value = '';
+        (rm.candidates || []).forEach((c) => {
+          const opt = el('option', '', `${c.label}(${c.visits} 次途经)`);
+          opt.value = c.address_ids.join(',');
+          const cur = rm[key];
+          if (cur && cur.address_ids.join(',') === opt.value) opt.selected = true;
+          sel.appendChild(opt);
+        });
+        selects[key] = sel;
+        row.appendChild(sel);
+        box.appendChild(row);
+      });
+      const save = el('button', 'rm-edit-save', '保存');
+      save.addEventListener('click', async () => {
+        const ids = (v) => v ? v.split(',').map(Number) : [];
+        save.disabled = true;
+        try {
+          await fetchJSON('/api/charging/anchors', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ home: ids(selects.home.value), work: ids(selects.work.value) }),
+          });
+          S.reminder = await api('charging/reminder');
+          box.hidden = true;
+          renderReminder();
+        } catch (err) { console.error(err); save.disabled = false; }
+      });
+      box.appendChild(save);
+    });
+  }
+
   /* ---------- 陪伴天数(提车日期,存 panel_manual settings) ---------- */
 
   function renderCompanion() {
@@ -2206,7 +2301,7 @@
     try {
       const o = await api('overview');
       if (S.carId === null) S.carId = o.car_id;
-      const [daily, chg, routes, act, eff, tpms, sys, health, sessions, cyc, temp, tpms24, pk, del] = await Promise.all([
+      const [daily, chg, routes, act, eff, tpms, sys, health, sessions, cyc, temp, tpms24, pk, del, rm] = await Promise.all([
         api(`drives/daily?days=${S.days}`),
         api('charging/summary?limit=12'),
         api(`routes?days=${S.days}`),
@@ -2221,6 +2316,7 @@
         api('tpms/trend?days=1'),
         api('parking/fees'),
         api('vehicle/delivery'),
+        api('charging/reminder'),
       ]);
       S.overview = {
         ...o,
@@ -2239,6 +2335,7 @@
       S.cycles = cyc;
       S.parking = pk;
       S.delivery = del.date;
+      S.reminder = rm;
       $('#state-badge').dataset.state = 'unknown';
       renderSys(sys);
       renderHeader();
@@ -2249,6 +2346,7 @@
       renderChargers();
       renderCsBatt();
       renderParking();
+      renderReminder();
       renderDaily();
       renderCharging();
       renderRoutes();
@@ -2272,7 +2370,7 @@
     renderDaily(); renderCharging();
     renderRoutes(); renderRoutesList();
     renderActivity(); renderEvents(); renderSentry();
-    renderEfficiency(); renderTpms(); renderCar(); renderSessions(); renderChargers(); renderCsBatt(); renderTemp(); renderParking();
+    renderEfficiency(); renderTpms(); renderCar(); renderSessions(); renderChargers(); renderCsBatt(); renderTemp(); renderParking(); renderReminder();
   }
 
   /* ---------- 功能分页(底部液态玻璃 Tab 栏) ---------- */
@@ -2437,6 +2535,7 @@
     initParking();
     initCompanion();
     initControl();
+    initReminder();
 
     // 停车费:整卡可折叠,默认收起,展开状态跨会话记忆(与充电详情同款)
     const pkCard = $('#pk-card');

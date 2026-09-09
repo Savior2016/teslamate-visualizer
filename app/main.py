@@ -1678,6 +1678,8 @@ from .sentry_sched import router as sentry_sched_router
 app.include_router(sentry_sched_router)
 app.include_router(parking_router)
 app.include_router(vehicle_router)
+from .reminder import router as reminder_router
+app.include_router(reminder_router)
 
 app.mount("/", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static"),
                            html=True), name="static")
