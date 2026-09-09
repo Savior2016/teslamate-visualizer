@@ -100,3 +100,15 @@
 #ctl-dialog-body .ctl-sched-row button:disabled,#ctl-dialog-body .ctl-sched-add button:disabled{opacity:.45;cursor:default}
 .ctl-sched-add{display:flex;gap:8px;align-items:center;margin-top:6px}
 #ctl-dialog-body .ctl-sched-add input{flex:1;min-width:0;width:auto;margin:0;padding:8px;font-size:14px;background:var(--page);color:var(--text-primary);border:1px solid var(--border);border-radius:8px}
+/* 午休时间点滚动选择器:双列滚轮 + 中选中横带 */
+.ctl-picker{position:relative;display:flex;justify-content:center;gap:16px;margin:6px 0 10px;user-select:none}
+.ctl-picker-band{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:170px;height:30px;border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:color-mix(in srgb,var(--surface-1) 60%,transparent);pointer-events:none;border-radius:6px}
+.ctl-wheel{height:150px;width:64px;overflow-y:auto;scroll-snap-type:y mandatory;text-align:center;scrollbar-width:none;border-radius:8px;overscroll-behavior:contain;touch-action:pan-y}
+.ctl-wheel::-webkit-scrollbar{display:none}
+.ctl-wheel:focus-visible{outline:2px solid var(--series-1);outline-offset:2px}
+.ctl-wheel-pad{display:block;height:60px}
+.ctl-wheel-item{height:30px;line-height:30px;scroll-snap-align:center;font-variant-numeric:tabular-nums;font-size:15px;color:var(--text-secondary);cursor:pointer;transition:color .15s ease,font-size .15s ease}
+.ctl-wheel-item.on{color:var(--text-primary);font-weight:600;font-size:17px}
+.ctl-picker.off .ctl-wheel{opacity:.35;pointer-events:none}
+.ctl-picker.off .ctl-picker-band{opacity:.35}
+#ctl-dialog{overscroll-behavior:contain}

@@ -23,6 +23,40 @@ def timer(tmp_path):
     return t,clock,calls,mode
 
 
+def _until_at(ts, offset):
+    """HH:MM in DISPLAY_TZ at `ts + offset` seconds, matching nap._until_ts semantics."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    from app.main import DISPLAY_TZ
+    return datetime.fromtimestamp(ts+offset, ZoneInfo(DISPLAY_TZ)).strftime("%H:%M")
+
+
+def test_nap_until_caps_end(timer):
+    t,clock,calls,mode=timer
+    until=_until_at(clock[0],120)
+    t.start('synthetic-vin',30,until)
+    assert t.public()['until']==until
+    assert abs(t.read()['ends_at']-(clock[0]+120))<61  # 到点早于计时,先到先停
+    clock[0]+=181;t.tick()
+    assert t.public()['phase']=='completed'
+
+
+def test_nap_until_past_today_falls_back_to_minutes(timer):
+    t,clock,calls,mode=timer
+    until=_until_at(clock[0],-3600)
+    t.start('synthetic-vin',10,until)  # 该时间点今日已过→次日,计时先触发
+    assert abs(t.read()['ends_at']-(clock[0]+600))<2
+    clock[0]+=601;t.tick()
+    assert t.public()['phase']=='completed'
+
+
+def test_nap_until_validation(client,monkeypatch,timer):
+    monkeypatch.setattr(nap,'timer',timer[0]);login(client)
+    for value in ['25:00','12:60','1:00','ab:cd',123]:
+        assert client.post('/api/control/nap/start',json={'minutes':30,'until':value}).status_code==422
+    assert not timer[2]
+
+
 def test_nap_survives_restart_and_pins_vehicle(timer):
     t,clock,calls,mode=timer
     t.start('synthetic-vin',5)

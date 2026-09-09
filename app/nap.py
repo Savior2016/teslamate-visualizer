@@ -31,7 +31,7 @@ class NapTimer:
 
     def public(self):
         job = self.read()
-        return {k: job[k] for k in ("phase", "ends_at", "minutes", "error", "updated_at", "attempts") if k in job}
+        return {k: job[k] for k in ("phase", "ends_at", "minutes", "until", "error", "updated_at", "attempts") if k in job}
 
     def active(self):
         return self.read().get("phase") in ACTIVE
@@ -48,15 +48,20 @@ class NapTimer:
             raise HTTPException(409, "此车辆暂未返回露营模式状态")
         return value
 
-    def start(self, vin, minutes):
+    def start(self, vin, minutes, until=None):
         with lock:
             if self.active():
                 raise HTTPException(409, "已有午休任务，请先结束当前午休")
             if self.mode(vin) != "off":
                 raise HTTPException(409, "车辆已开启驻车空调、宠物或露营模式，请先在 Tesla App 关闭后再开始午休")
             now = self.clock()
-            job = {"phase":"starting", "vin":vin, "minutes":minutes, "ends_at":now+minutes*60,
+            ends_at = now + minutes * 60
+            if until:  # 计时或到点先到先停
+                ends_at = min(ends_at, _until_ts(until, now))
+            job = {"phase":"starting", "vin":vin, "minutes":minutes, "ends_at":ends_at,
                    "updated_at":now, "attempts":0, "error":""}
+            if until:
+                job["until"] = until
             self.write(job)  # Persist shutdown obligation before any physical command.
             try:
                 result = self.command("set_climate_keeper_mode", {"climate_keeper_mode":3}, vin)
@@ -149,15 +154,29 @@ def stop_worker():
         _thread.join(timeout=55)
 
 
+def _until_ts(until, now):
+    """Next DISPLAY_TZ-local occurrence of HH:MM at or after `now` (tomorrow if past)."""
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+    from .main import DISPLAY_TZ
+    hour, minute = (int(x) for x in until.split(":"))
+    tz = ZoneInfo(DISPLAY_TZ)
+    target = datetime.fromtimestamp(now, tz).replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if target.timestamp() <= now:
+        target += timedelta(days=1)
+    return target.timestamp()
+
+
 class NapRequest(BaseModel):
     minutes: int = Field(ge=5, le=180, strict=True)
+    until: str | None = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
 
 
 @router.post("/api/control/nap/start")
 def start(body: NapRequest, request: Request):
     from . import main, control
     main.require_admin(request)
-    return timer.start(control._vin(), body.minutes)
+    return timer.start(control._vin(), body.minutes, body.until)
 
 
 @router.post("/api/control/nap/stop")

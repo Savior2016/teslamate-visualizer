@@ -42,13 +42,26 @@
     const n=model.nap||{};
     if(n.phase==='active') {
       const seconds=Math.max(0,Math.ceil(n.ends_at-Date.now()/1000));
-      return seconds ? `剩余 ${Math.floor(seconds/60)} 分 ${seconds%60} 秒` : '时间已到，正在确认关闭';
+      const base=seconds ? `剩余 ${Math.floor(seconds/60)} 分 ${seconds%60} 秒` : '时间已到，正在确认关闭';
+      return n.until?base+` · 最迟 ${n.until}`:base;
     }
-    return phases[n.phase]||'定时露营';
+    return phases[n.phase]||napDefaultText();
   }
+  /* 未开启时模块上显示最后一次使用的配置,与快捷滑动开启一致 */
+  function napDefaultText(){
+    const u=napUntil();
+    return `定时 ${napMinutes()} 分钟`+(u?` · 最迟 ${u}`:'');
+  }
+  let napDialogSlide=null, napPollAt=0;
   function renderNap(){
-    $('ctl-module-nap').textContent=napText();
+    /* 模块瓦片:开启/过渡中显示状态与倒计时,空闲时显示最后一次使用的配置(即快捷开启将用的配置) */
+    $('ctl-module-nap').textContent=active()?napText():napDefaultText();
     if($('ctl-nap-status'))$('ctl-nap-status').textContent=napText()+(model.nap?.error?' · '+model.nap.error:'');
+    if(napDialogSlide&&dialog.open)napDialogSlide.set(active());  // 弹窗滑块每次打开才重建,计时结束要由这里同步回去
+    /* 到点/正在结束时加快轮询(常规 15 秒一次),让滑块与颜色及时回到关闭状态 */
+    const n=model.nap||{};
+    const settling=n.phase==='stopping'||n.phase==='retrying'||(n.phase==='active'&&n.ends_at&&Date.now()/1000>=n.ends_at);
+    if(settling&&!busy&&Date.now()-napPollAt>5000){napPollAt=Date.now();load();}
   }
   /* 车身部位:开/关只靠视觉效果(发光描边+图标变色,车锁换图标),不再拼状态文字 */
   const zones={lock:['locked','已锁','未锁'],sentry:['sentry','哨兵已开启','哨兵已关闭'],windows:['windows_open','车窗已通风','车窗已关闭'],chargeport:['charge_port','充电口已打开','充电口已关闭'],frunk:['frunk_open','前备箱已打开','前备箱已关闭'],trunk:['trunk_open','后备箱已打开','后备箱已关闭'],climate:['climate_on','空调已开启','空调已关闭']};
@@ -123,6 +136,9 @@
       momentary?fireOnce():commit(!on);
     });
     paint();
+    /* 隐藏时(控制页未激活/弹窗未挂载)clientWidth=0,travel 算不出,旋钮会停在左侧;
+       元素变为可见或尺寸变化时重绘,把旋钮补到正确位置 */
+    if(window.ResizeObserver)new ResizeObserver(()=>{if(!dragging)paint();}).observe(root);
     return {el:root,
       set(v){if(sending||dragging)return;on=v===true;progress=on?1:0;paint();},
       get:()=>on};
@@ -204,8 +220,61 @@
   function input(id,label,value,min,max,step=1){
     const l=document.createElement('label');l.textContent=label;const i=document.createElement('input');i.id=id;i.type='number';i.min=min;i.max=max;i.step=step;i.value=value;i.inputMode='decimal';l.appendChild(i);$('ctl-dialog-body').appendChild(l);return i;
   }
+  /* 鼠标滚轮直接微调数字输入(在输入范围内按 step 增减) */
+  function wheelNumber(i){
+    i.addEventListener('wheel',e=>{
+      e.preventDefault();
+      const step=Number(i.step)||1,min=Number(i.min),max=Number(i.max);
+      const cur=i.value===''?min:Number(i.value);
+      i.value=Math.min(max,Math.max(min,cur+(e.deltaY<0?step:-step)));
+      i.dispatchEvent(new Event('input'));
+    },{passive:false});
+  }
+  /* 时间滚动选择器:小时/分钟两列(scroll-snap,滚轮/触摸/方向键均可),返回 {el,value,set,setEnabled} */
+  function timeWheel(value,onChange){
+    const wrap=document.createElement('div');wrap.className='ctl-picker';
+    const band=document.createElement('i');band.className='ctl-picker-band';wrap.appendChild(band);
+    const cols={};
+    const read=()=>String(cols.hour.idx).padStart(2,'0')+':'+String(cols.minute.idx*5).padStart(2,'0');
+    [['hour',24,1,'小时'],['minute',12,5,'分钟']].forEach(([kind,count,step,label])=>{
+      const col=document.createElement('div');col.className='ctl-wheel';col.tabIndex=0;
+      col.setAttribute('role','listbox');col.setAttribute('aria-label',label);
+      const state=cols[kind]={col,idx:0};
+      const padTop=document.createElement('i');padTop.className='ctl-wheel-pad';col.appendChild(padTop);
+      const items=[];
+      const mark=idx=>{state.idx=idx;items.forEach((it,i)=>it.classList.toggle('on',i===idx));};
+      const select=(idx,smooth)=>{idx=Math.max(0,Math.min(count-1,idx));col.scrollTo({top:idx*30,behavior:smooth?'smooth':'instant'});mark(idx);if(onChange)onChange(read());};
+      for(let i=0;i<count;i++){
+        const item=document.createElement('div');item.className='ctl-wheel-item';
+        item.textContent=String(i*step).padStart(2,'0');
+        item.addEventListener('click',()=>select(i,true));
+        col.appendChild(item);items.push(item);
+      }
+      const padBottom=document.createElement('i');padBottom.className='ctl-wheel-pad';col.appendChild(padBottom);
+      let tm;
+      col.addEventListener('scroll',()=>{
+        mark(Math.max(0,Math.min(count-1,Math.round(col.scrollTop/30))));
+        clearTimeout(tm);tm=setTimeout(()=>select(state.idx,true),120);  // 滚动停下后吸附并回报
+      });
+      col.addEventListener('keydown',e=>{
+        if(e.key!=='ArrowUp'&&e.key!=='ArrowDown')return;
+        e.preventDefault();select(state.idx+(e.key==='ArrowUp'?-1:1),true);
+      });
+      wrap.appendChild(col);
+    });
+    function set(v){
+      const [h,m]=v.split(':').map(Number);
+      cols.hour.idx=Math.min(23,h);cols.minute.idx=Math.min(11,Math.round(m/5));
+      /* 弹窗未显示时 scrollTop 不生效,等布局后再吸附到位 */
+      requestAnimationFrame(()=>{cols.hour.col.scrollTop=cols.hour.idx*30;cols.minute.col.scrollTop=cols.minute.idx*30;});
+      cols.hour.col.querySelectorAll('.ctl-wheel-item').forEach((it,i)=>it.classList.toggle('on',i===cols.hour.idx));
+      cols.minute.col.querySelectorAll('.ctl-wheel-item').forEach((it,i)=>it.classList.toggle('on',i===cols.minute.idx));
+    }
+    set(value||'13:30');
+    return {el:wrap,value:read,set,setEnabled(on){wrap.classList.toggle('off',!on);}};
+  }
   function open(name){
-    const s=model.states||{};const body=$('ctl-dialog-body');body.textContent='';$('ctl-dialog-message').textContent='';
+    const s=model.states||{};const body=$('ctl-dialog-body');body.textContent='';$('ctl-dialog-message').textContent='';napDialogSlide=null;
     const titles={climate:'空调温度',charge:'充电控制',lights:'车灯与鸣笛',nap:'午休模式',lock:'车锁',sentry:'哨兵模式',windows:'车窗',chargeport:'充电口',frunk:'前备箱',trunk:'后备箱'};
     $('ctl-dialog-title').textContent=titles[name]||'车辆操作';
     const stateText=canWrite()?'':(model.role==='viewer'?'只读账号，仅可查看状态。':'请先在个人中心完成控制配置。');
@@ -236,9 +305,34 @@
       slideRow('连续闪灯','',model.strobe_active===true,flipCmd(['flash_strobe',()=>({seconds:strobeSeconds})],['flash_strobe_stop',{}]),'lights','var(--series-4)',['滑动开始闪灯','闪灯中']);
     }else if(name==='nap'){
       const p=document.createElement('p');p.id='ctl-nap-status';body.appendChild(p);
-      input('ctl-nap-minutes','午休时长（5–180 分钟）',napMinutes(),5,180);
-      slideRow('午休模式','',active(),async target=>{
-        if(target){const field=$('ctl-nap-minutes');if(!field.reportValidity()||!field.value)return null;await nap(true,Number(field.value));}
+      /* 时长:点击预设芯片直接填好,也可输入或滚轮微调 */
+      const minsField=input('ctl-nap-minutes','午休时长（5–180 分钟，滚轮可微调）',napMinutes(),5,180);
+      wheelNumber(minsField);
+      const minsChips=document.createElement('div');minsChips.className='ctl-seg';
+      const syncMins=()=>minsChips.querySelectorAll('button').forEach(x=>x.classList.toggle('on',Number(x.dataset.min)===Number(minsField.value)));
+      [15,20,30,45,60].forEach(m=>{
+        const b=document.createElement('button');b.type='button';b.dataset.min=m;b.textContent=m+' 分钟';
+        b.addEventListener('click',()=>{minsField.value=m;syncMins();});
+        minsChips.appendChild(b);
+      });
+      minsField.addEventListener('input',syncMins);
+      $('ctl-dialog-body').appendChild(minsChips);syncMins();
+      /* 最迟停止时间点:不限/到点停止切换,滚轮选择器选时刻;与计时先到先停 */
+      let until=napUntil();
+      tip('最迟停止时间点（可选，与计时先到先停）');
+      const modeChips=document.createElement('div');modeChips.className='ctl-seg';
+      const picker=timeWheel(until||'13:30',v=>{if(!picker.el.classList.contains('off'))until=v;});
+      const syncMode=()=>modeChips.querySelectorAll('button').forEach(x=>x.classList.toggle('on',(x.dataset.mode==='until')===!!until));
+      [['不限',null],['到点停止','until']].forEach(([label,mode])=>{
+        const b=document.createElement('button');b.type='button';b.dataset.mode=mode||'none';b.textContent=label;
+        b.addEventListener('click',()=>{until=mode?picker.value():null;picker.setEnabled(!!until);syncMode();});
+        modeChips.appendChild(b);
+      });
+      $('ctl-dialog-body').appendChild(modeChips);
+      picker.setEnabled(!!until);syncMode();
+      $('ctl-dialog-body').appendChild(picker.el);
+      napDialogSlide=slideRow('午休模式','',active(),async target=>{
+        if(target){const field=$('ctl-nap-minutes');if(!field.reportValidity()||!field.value)return null;await nap(true,Number(field.value),until);}
         else await nap(false);
         return active();  // 滑块始终同步到实际状态(取消/失败时弹回原位)
       },'nap','var(--cat-idle)',['滑动开启','午休中']);
@@ -285,18 +379,25 @@
     const saved=parseInt(localStorage.getItem('ttv-nap-minutes'),10);
     return Number.isFinite(saved)?Math.min(180,Math.max(5,saved)):30;
   }
-  async function nap(start,minutes){
+  function napUntil(){
+    const v=localStorage.getItem('ttv-nap-until');
+    return /^([01]\d|2[0-3]):[0-5]\d$/.test(v||'')?v:null;
+  }
+  async function nap(start,minutes,until){
     if(busy||!canWrite())return;
-    if(start)localStorage.setItem('ttv-nap-minutes',String(minutes));
+    if(start){
+      localStorage.setItem('ttv-nap-minutes',String(minutes));
+      if(until)localStorage.setItem('ttv-nap-until',until);else localStorage.removeItem('ttv-nap-until');
+    }
     busy=true;render();message(start?'正在开启露营模式…':'正在结束午休…');
-    try{model.nap=await api('nap/'+(start?'start':'stop'),start?{minutes}:{});message(model.nap.error||'午休设置已更新',!!model.nap.error);}
+    try{model.nap=await api('nap/'+(start?'start':'stop'),start?{minutes,...(until?{until}:{})}:{});message(model.nap.error||'午休设置已更新',!!model.nap.error);}
     catch(e){message(e.message,true);}finally{busy=false;await load();renderNap();}
   }
   /* 模块瓦片滑动开关:右滑开、回滑关(无确认窗) */
   async function flipSwitch(name,target){
     const cur=SWITCH[name].state()===true;
     if(busy||!guardWrite())return cur;
-    if(name==='nap'){await nap(target,target?napMinutes():undefined);return active();}
+    if(name==='nap'){await nap(target,target?napMinutes():undefined,target?napUntil():undefined);return active();}
     const [cmd,argsOrFn]=target?SWITCH[name].on:SWITCH[name].off;
     const args=typeof argsOrFn==='function'?argsOrFn():argsOrFn;
     busy=true;message(SENDING);
